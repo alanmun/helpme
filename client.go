@@ -22,10 +22,14 @@ Correct the command so it will actually work. Keep "cmd" on one line. Put nothin
 
 // Wire types for the OpenAI-compatible /chat/completions endpoint.
 type chatReq struct {
-	Model          string        `json:"model"`
-	MaxTokens      int           `json:"max_tokens"`
-	Messages       []chatMessage `json:"messages"`
-	ResponseFormat *respFormat   `json:"response_format,omitempty"`
+	Model string `json:"model"`
+	// Exactly one of these is set: OpenAI's reasoning models require
+	// max_completion_tokens; Anthropic-compat and OpenRouter use max_tokens.
+	MaxTokens           int           `json:"max_tokens,omitempty"`
+	MaxCompletionTokens int           `json:"max_completion_tokens,omitempty"`
+	ReasoningEffort     string        `json:"reasoning_effort,omitempty"`
+	Messages            []chatMessage `json:"messages"`
+	ResponseFormat      *respFormat   `json:"response_format,omitempty"`
 }
 
 type respFormat struct {
@@ -54,17 +58,30 @@ type fix struct {
 	Why string `json:"why"`
 }
 
-func askFix(p provider, command, errText string) (fix, error) {
-	reqBody := chatReq{
-		Model:     p.model,
-		MaxTokens: 150,
+// buildRequest assembles the chat-completions body for a provider, selecting the
+// right token field and including reasoning_effort only when set.
+func buildRequest(p provider, command, errText string) chatReq {
+	const maxOut = 1024 // headroom for reasoning tokens; the JSON answer is tiny
+
+	r := chatReq{
+		Model:           p.model,
+		ReasoningEffort: p.reasoning, // omitempty drops it when ""
 		Messages: []chatMessage{
 			{Role: "system", Content: systemPrompt},
 			{Role: "user", Content: fmt.Sprintf("Command:\n%s\n\nError:\n%s", command, strings.TrimSpace(errText))},
 		},
 		ResponseFormat: &respFormat{Type: "json_object"},
 	}
-	buf, err := json.Marshal(reqBody)
+	if p.maxCompletionTokens {
+		r.MaxCompletionTokens = maxOut
+	} else {
+		r.MaxTokens = maxOut
+	}
+	return r
+}
+
+func askFix(p provider, command, errText string) (fix, error) {
+	buf, err := json.Marshal(buildRequest(p, command, errText))
 	if err != nil {
 		return fix{}, err
 	}

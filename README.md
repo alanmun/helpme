@@ -28,9 +28,9 @@ provider:
 
 | Provider | Endpoint | Default model |
 |---|---|---|
-| `anthropic` (default) | Anthropic OpenAI-compat | `claude-haiku-4-5` |
-| `openai` | OpenAI | `gpt-4o-mini` |
-| `openrouter` | OpenRouter | `openai/gpt-4o-mini` |
+| `anthropic` (default) | Anthropic OpenAI-compat | `claude-sonnet-4-6` |
+| `openai` | OpenAI | `gpt-5.4-mini` |
+| `openrouter` | OpenRouter | `anthropic/claude-sonnet-4.6` |
 | `custom` | your base URL | (set a model) |
 
 **Easiest — run the wizard** (no env vars to babysit):
@@ -44,8 +44,13 @@ It prompts for provider, model, and key (key entry is hidden) and saves them to
 your shell rc.
 
 `custom` points at anything that speaks the same API — Groq, Together, a local
-Ollama (`http://localhost:11434/v1`), LM Studio, etc. Defaults favor the
-cheap/fast model tier on purpose: a command-fixer should be snappy.
+Ollama (`http://localhost:11434/v1`), LM Studio, etc.
+
+Defaults run at **low reasoning** for speed — a command-fixer should be snappy.
+That's sent as `reasoning_effort: low` for OpenAI/OpenRouter; for Anthropic it's
+omitted because the compat endpoint already runs without extended thinking (=
+low reasoning) and may 400 on the field. Override with `HELPME_REASONING`
+(`low`/`medium`/`high`/`minimal`/`off`) or the `reasoning` config key.
 
 **Prefer env vars / CI?** They still work and **override the config file**:
 `HELPME_PROVIDER`, `HELPME_API_KEY`, `HELPME_MODEL`, `HELPME_BASE_URL`. And if
@@ -72,7 +77,15 @@ shell hook (emitted from the binary, so it always matches), and adds one
 provider env vars, done. Linux and macOS (Intel + Apple Silicon); on Windows,
 use WSL.
 
-### Build from source (contributors)
+### Local testing / build from source
+
+No release needed — build and wire up the hook in one step (requires Go):
+
+```sh
+./dev-install.sh
+```
+
+Or do it by hand:
 
 ```sh
 go build -o ~/.local/bin/helpme-bin .

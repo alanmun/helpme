@@ -14,6 +14,7 @@
 //	HELPME_API_KEY   the provider key (optional for local "custom" servers)
 //	HELPME_MODEL     override the default model for the chosen provider
 //	HELPME_BASE_URL  required for "custom"; also overrides any provider's URL
+//	HELPME_REASONING low | medium | high | minimal | off       (reasoning effort)
 //
 // API key fallback chain: HELPME_API_KEY > config file > the provider's standard
 // var (ANTHROPIC_API_KEY / OPENAI_API_KEY / OPENROUTER_API_KEY). Only API keys
@@ -31,13 +32,26 @@ type provider struct {
 	baseURL string
 	apiKey  string
 	model   string
+	// reasoning effort to request (low|medium|high|minimal); "" omits the field.
+	reasoning string
+	// OpenAI's reasoning models reject max_tokens and want max_completion_tokens.
+	maxCompletionTokens bool
 }
 
-// Sensible fast/cheap defaults — this tool wants a snappy one-liner, never an essay.
-var providerDefaults = map[string]struct{ baseURL, model string }{
-	"anthropic":  {"https://api.anthropic.com/v1", "claude-haiku-4-5"},
-	"openai":     {"https://api.openai.com/v1", "gpt-4o-mini"},
-	"openrouter": {"https://openrouter.ai/api/v1", "openai/gpt-4o-mini"},
+// Defaults: a capable-but-fast model at low reasoning — smart enough to fix a
+// command, never slow enough to write an essay.
+//
+// reasoning is sent as the OpenAI-standard `reasoning_effort`. It's left empty
+// for "anthropic": its OpenAI-compat endpoint already runs without extended
+// thinking by default (= low reasoning), so sending the field is redundant and
+// risks a 400 on a layer that may not map it. OpenAI/OpenRouter take it directly.
+var providerDefaults = map[string]struct {
+	baseURL, model, reasoning string
+	maxCompletionTokens       bool
+}{
+	"anthropic":  {"https://api.anthropic.com/v1", "claude-sonnet-4-6", "", false},
+	"openai":     {"https://api.openai.com/v1", "gpt-5.4-mini", "low", true},
+	"openrouter": {"https://openrouter.ai/api/v1", "anthropic/claude-sonnet-4.6", "low", false},
 }
 
 // Standard key env var per provider, used as a fallback for HELPME_API_KEY.
@@ -69,9 +83,18 @@ func loadProvider() (provider, error) {
 	}
 
 	p := provider{
-		baseURL: pick("HELPME_BASE_URL", cfg.BaseURL, d.baseURL),
-		model:   pick("HELPME_MODEL", cfg.Model, d.model),
+		baseURL:             pick("HELPME_BASE_URL", cfg.BaseURL, d.baseURL),
+		model:               pick("HELPME_MODEL", cfg.Model, d.model),
+		maxCompletionTokens: d.maxCompletionTokens,
 	}
+
+	// Reasoning effort: HELPME_REASONING > config > provider default; off/none omit it.
+	reasoning := strings.ToLower(pick("HELPME_REASONING", cfg.Reasoning, d.reasoning))
+	switch reasoning {
+	case "off", "none", "disabled":
+		reasoning = ""
+	}
+	p.reasoning = reasoning
 
 	// API key: HELPME_API_KEY > config > provider-standard env var.
 	p.apiKey = pick("HELPME_API_KEY", cfg.APIKey, "")

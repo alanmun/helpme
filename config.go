@@ -16,10 +16,11 @@ import (
 )
 
 type config struct {
-	Provider string `json:"provider,omitempty"`
-	APIKey   string `json:"api_key,omitempty"`
-	Model    string `json:"model,omitempty"`
-	BaseURL  string `json:"base_url,omitempty"`
+	Provider  string `json:"provider,omitempty"`
+	APIKey    string `json:"api_key,omitempty"`
+	Model     string `json:"model,omitempty"`
+	BaseURL   string `json:"base_url,omitempty"`
+	Reasoning string `json:"reasoning,omitempty"`
 }
 
 // configPath honors XDG_CONFIG_HOME, falling back to ~/.config.
@@ -89,7 +90,9 @@ func runSetup() {
 		key = cur.APIKey
 	}
 
-	c := config{Provider: provider, APIKey: key, Model: model, BaseURL: baseURL}
+	// Reasoning isn't prompted (defaults to low per provider); preserve any
+	// value already set in the file rather than wiping it.
+	c := config{Provider: provider, APIKey: key, Model: model, BaseURL: baseURL, Reasoning: cur.Reasoning}
 	if err := writeConfig(c); err != nil {
 		fmt.Fprintln(os.Stderr, "helpme: could not save config:", err)
 		os.Exit(1)
