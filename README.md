@@ -46,14 +46,46 @@ Ollama (`HELPME_BASE_URL=http://localhost:11434/v1`), LM Studio, etc.
 Defaults favor the cheap/fast model tier on purpose: a command-fixer should be
 snappy.
 
+**Already have a key exported?** If `HELPME_API_KEY` is unset, helpme falls back
+to the provider's standard var — `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, or
+`OPENROUTER_API_KEY` — so most users need no `HELPME_*` config at all.
+
+> helpme only reads **API keys**. It deliberately does **not** use the OAuth
+> tokens from Claude Code or Codex sign-in: those are tied to consumer plans
+> (Pro/Max/Plus) whose entitlement isn't licensed to third-party apps, and
+> borrowing them risks getting the account banned.
+
 ## Install
 
+No Go toolchain needed — the installer downloads a prebuilt static binary:
+
 ```sh
-./install.sh
+curl -fsSL https://raw.githubusercontent.com/alanmun/helpme/main/install.sh | sh
 ```
 
-Builds `helpme-bin` into `~/.local/bin` and adds a one-line `source` to your
-`~/.zshrc` or `~/.bashrc`. Open a new shell, set your provider env vars, and go.
+It detects your OS/arch, drops `helpme-bin` into `~/.local/bin`, writes the
+shell hook (emitted from the binary, so it always matches), and adds one
+`source` line to your `~/.zshrc` or `~/.bashrc`. Open a new shell, set your
+provider env vars, done. Linux and macOS (Intel + Apple Silicon); on Windows,
+use WSL.
+
+### Build from source (contributors)
+
+```sh
+go build -o ~/.local/bin/helpme-bin .
+helpme-bin --print-hook zsh > ~/.config/helpme/helpme.zsh   # or bash
+echo 'source ~/.config/helpme/helpme.zsh' >> ~/.zshrc
+```
+
+### Cutting a release (maintainers)
+
+```sh
+./build-release.sh v0.1.0          # cross-compiles dist/ + SHA256SUMS
+gh release create v0.1.0 dist/*    # attach the binaries
+```
+
+`install.sh` pulls assets from `github.com/<HELPME_REPO>/releases`; the binaries
+are never committed (see `.gitignore`).
 
 ## How it's wired
 

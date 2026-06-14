@@ -12,6 +12,13 @@
 //	HELPME_API_KEY   the provider key (optional for local "custom" servers)
 //	HELPME_MODEL     override the default model for the chosen provider
 //	HELPME_BASE_URL  required for "custom"; also overrides any provider's URL
+//
+// If HELPME_API_KEY is unset, the provider's standard key var is used as a
+// fallback (ANTHROPIC_API_KEY / OPENAI_API_KEY / OPENROUTER_API_KEY) — so users
+// who already export one of those get zero-config usage. Only API keys are read
+// this way; helpme never touches subscription OAuth tokens (Claude Code /
+// Codex sign-in), whose consumer-plan entitlement isn't licensed to third-party
+// apps.
 package main
 
 import (
@@ -31,6 +38,13 @@ var providerDefaults = map[string]struct{ baseURL, model string }{
 	"anthropic":  {"https://api.anthropic.com/v1", "claude-haiku-4-5"},
 	"openai":     {"https://api.openai.com/v1", "gpt-4o-mini"},
 	"openrouter": {"https://openrouter.ai/api/v1", "openai/gpt-4o-mini"},
+}
+
+// Standard key env var per provider, used as a fallback for HELPME_API_KEY.
+var providerKeyEnv = map[string]string{
+	"anthropic":  "ANTHROPIC_API_KEY",
+	"openai":     "OPENAI_API_KEY",
+	"openrouter": "OPENROUTER_API_KEY",
 }
 
 func loadProvider() (provider, error) {
@@ -60,8 +74,17 @@ func loadProvider() (provider, error) {
 	}
 
 	p.apiKey = strings.TrimSpace(os.Getenv("HELPME_API_KEY"))
+	if p.apiKey == "" {
+		if ev := providerKeyEnv[name]; ev != "" {
+			p.apiKey = strings.TrimSpace(os.Getenv(ev))
+		}
+	}
 	if p.apiKey == "" && name != "custom" {
-		return p, fmt.Errorf("HELPME_API_KEY is not set")
+		hint := "HELPME_API_KEY"
+		if ev := providerKeyEnv[name]; ev != "" {
+			hint += " or " + ev
+		}
+		return p, fmt.Errorf("no API key found; set %s", hint)
 	}
 	if p.model == "" {
 		return p, fmt.Errorf("no model selected; set HELPME_MODEL")

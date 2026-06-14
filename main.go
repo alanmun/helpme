@@ -22,8 +22,29 @@ import (
 	"strings"
 )
 
+// version is overridden at release time via -ldflags "-X main.version=...".
+var version = "dev"
+
 func main() {
 	args := os.Args[1:]
+
+	// Sub-commands (only when they're the first argument, so they can't collide
+	// with a real command the wrapper forwards).
+	if len(args) > 0 {
+		switch args[0] {
+		case "--print-hook":
+			if len(args) < 2 {
+				fmt.Fprintln(os.Stderr, "usage: helpme-bin --print-hook zsh|bash")
+				os.Exit(2)
+			}
+			printHook(args[1])
+			return
+		case "--version", "-v":
+			fmt.Println("helpme", version)
+			return
+		}
+	}
+
 	if len(args) == 0 {
 		fmt.Fprintln(os.Stderr, "helpme: no command given")
 		os.Exit(2)

@@ -1,39 +1,78 @@
 #!/usr/bin/env sh
-# helpme installer.
+# helpme installer — downloads a prebuilt binary. No Go toolchain required.
 #
-# Builds the helpme binary (requires Go) into ~/.local/bin and wires the shell
-# wrapper into your rc file. Idempotent — safe to re-run.
+#   curl -fsSL https://raw.githubusercontent.com/<owner>/helpme/main/install.sh | sh
 #
-#   ./install.sh
+# Detects your OS/arch, fetches the matching binary into ~/.local/bin, writes
+# the shell hook straight from the binary (so it always matches), and adds one
+# `source` line to your rc. Idempotent — safe to re-run.
 #
-# Override the binary location with HELPME_BIN_DIR.
+# Env overrides:
+#   HELPME_REPO              GitHub owner/repo            (default: alanmun/helpme)
+#   HELPME_VERSION           release tag or "latest"      (default: latest)
+#   HELPME_BIN_DIR           where helpme-bin goes        (default: ~/.local/bin)
+#   HELPME_HOOK_DIR          where the hook is written    (default: ~/.config/helpme)
+#   HELPME_RELEASE_BASE_URL  override asset base URL (e.g. file:///path/to/dist for testing)
 set -e
 
-REPO_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+REPO="${HELPME_REPO:-alanmun/helpme}"
+VERSION="${HELPME_VERSION:-latest}"
 BIN_DIR="${HELPME_BIN_DIR:-$HOME/.local/bin}"
-mkdir -p "$BIN_DIR"
+HOOK_DIR="${HELPME_HOOK_DIR:-$HOME/.config/helpme}"
 
-if ! command -v go >/dev/null 2>&1; then
-  echo "error: Go is required to build helpme (https://go.dev/dl/)." >&2
-  exit 1
+if [ -n "$HELPME_RELEASE_BASE_URL" ]; then
+  base="$HELPME_RELEASE_BASE_URL"
+elif [ "$VERSION" = "latest" ]; then
+  base="https://github.com/$REPO/releases/latest/download"
+else
+  base="https://github.com/$REPO/releases/download/$VERSION"
 fi
 
-echo "Building helpme-bin -> $BIN_DIR/helpme-bin"
-( cd "$REPO_DIR" && go build -o "$BIN_DIR/helpme-bin" . )
+# Normalize OS.
+os=$(uname -s | tr '[:upper:]' '[:lower:]')
+case "$os" in
+  linux)  os=linux ;;
+  darwin) os=darwin ;;
+  *) echo "unsupported OS: $os (helpme targets linux/macOS; on Windows use WSL)" >&2; exit 1 ;;
+esac
 
-# Choose the hook matching the current shell.
+# Normalize arch.
+arch=$(uname -m)
+case "$arch" in
+  x86_64|amd64)  arch=amd64 ;;
+  aarch64|arm64) arch=arm64 ;;
+  *) echo "unsupported arch: $arch" >&2; exit 1 ;;
+esac
+
+asset="helpme-bin-${os}-${arch}"
+mkdir -p "$BIN_DIR" "$HOOK_DIR"
+
+echo "Downloading $asset"
+if command -v curl >/dev/null 2>&1; then
+  curl -fsSL "$base/$asset" -o "$BIN_DIR/helpme-bin"
+elif command -v wget >/dev/null 2>&1; then
+  wget -qO "$BIN_DIR/helpme-bin" "$base/$asset"
+else
+  echo "need curl or wget to download" >&2; exit 1
+fi
+chmod +x "$BIN_DIR/helpme-bin"
+
+# Emit the shell hook from the binary itself (always version-matched).
 shell_name=$(basename "${SHELL:-}")
 case "$shell_name" in
-  zsh)  hook="$REPO_DIR/hooks/helpme.zsh";  rc="$HOME/.zshrc" ;;
-  bash) hook="$REPO_DIR/hooks/helpme.bash"; rc="$HOME/.bashrc" ;;
+  zsh)  rc="$HOME/.zshrc";  hookfile="$HOOK_DIR/helpme.zsh" ;;
+  bash) rc="$HOME/.bashrc"; hookfile="$HOOK_DIR/helpme.bash" ;;
   *)
-    echo "Unrecognized shell '$shell_name'."
-    echo "Source the matching file in hooks/ from your shell rc manually."
+    echo "Binary installed to $BIN_DIR/helpme-bin."
+    echo "Unrecognized shell '$shell_name' — write a hook manually, e.g.:"
+    echo "  helpme-bin --print-hook zsh > $HOOK_DIR/helpme.zsh && source $HOOK_DIR/helpme.zsh"
     exit 0
     ;;
 esac
 
-line="source \"$hook\""
+"$BIN_DIR/helpme-bin" --print-hook "$shell_name" > "$hookfile"
+
+line="source \"$hookfile\""
 if ! grep -qsF "$line" "$rc"; then
   printf '\n# helpme\n%s\n' "$line" >> "$rc"
   echo "Added helpme hook to $rc"
@@ -49,5 +88,5 @@ esac
 echo
 echo "Done. Open a new shell (or: source $rc), then set your provider:"
 echo "  export HELPME_PROVIDER=anthropic        # or openai | openrouter | custom"
-echo "  export HELPME_API_KEY=sk-ant-..."
+echo "  export HELPME_API_KEY=sk-ant-...         # or just have ANTHROPIC_API_KEY set"
 echo "Then try:  helpme find -f myfile.txt"

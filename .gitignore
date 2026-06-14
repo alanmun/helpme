@@ -1,3 +1,6 @@
 # Built binary
 /helpme-bin
 helpme-bin
+
+# Release artifacts
+/dist/
