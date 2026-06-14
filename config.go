@@ -11,8 +11,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-
-	"golang.org/x/term"
 )
 
 type config struct {
@@ -85,7 +83,7 @@ func runSetup() {
 
 	model := prompt(in, "Model", firstNonEmpty(cur.Model, providerDefaults[provider].model))
 
-	key := promptSecret(in, "API key (blank to keep existing)")
+	key := promptKey(in)
 	if key == "" {
 		key = cur.APIKey
 	}
@@ -117,20 +115,18 @@ func prompt(in *bufio.Reader, label, def string) string {
 	return line
 }
 
-// promptSecret reads without echoing when stdin is a terminal; otherwise it
-// falls back to a plain line read (e.g. for piped/non-interactive input).
-func promptSecret(in *bufio.Reader, label string) string {
-	fmt.Printf("%s: ", label)
-	fd := int(os.Stdin.Fd())
-	if term.IsTerminal(fd) {
-		b, err := term.ReadPassword(fd)
-		fmt.Println()
-		if err == nil {
-			return strings.TrimSpace(string(b))
-		}
-	}
+// promptKey reads the API key with normal (visible) echo — deliberately NOT
+// hidden input. This is a local, one-time setup and "did my paste actually
+// land?" matters more than hiding the key from your own screen. After capture
+// it prints a masked confirmation.
+func promptKey(in *bufio.Reader) string {
+	fmt.Print("API key (blank to keep existing): ")
 	line, _ := in.ReadString('\n')
-	return strings.TrimSpace(line)
+	key := strings.TrimSpace(line)
+	if key != "" {
+		fmt.Println("  got:", maskKey(key))
+	}
+	return key
 }
 
 func firstNonEmpty(vals ...string) string {
@@ -142,12 +138,16 @@ func firstNonEmpty(vals ...string) string {
 	return ""
 }
 
+// maskKey shows the first few characters then asterisks — enough to confirm the
+// right key landed without printing the whole secret again.
 func maskKey(k string) string {
+	k = strings.TrimSpace(k)
 	if k == "" {
 		return "(none)"
 	}
-	if len(k) <= 8 {
-		return "****"
+	shown := 6
+	if len(k) < shown {
+		shown = len(k)
 	}
-	return k[:4] + "…" + k[len(k)-4:]
+	return k[:shown] + "**********"
 }

@@ -6,12 +6,23 @@
 # confirmation with no LLM call; on failure send the command + its error to the
 # helpme binary, explain the fix, and offer the corrected command.
 #
-# Bash has no equivalent of zsh's `print -z` (push onto the next prompt), so on
-# a fix it drops you into an editable, prefilled line — press Enter to run it,
-# or edit first.
+# On a fix, the corrected command is pushed onto your NEXT prompt (editable,
+# runs as a normal command, lands in history) using the readline trick below.
 #
 # Note: a `helpme`-prefixed command is executed as typed. Don't `helpme`
 # something destructive to "see if it works" — it will run.
+
+# __helpme_prefill — bash's equivalent of zsh `print -z`: put text on the next
+# prompt's command line. We bind the terminal's status-report reply (ESC [ 0 n)
+# to insert the text, then ask the terminal to send that reply (ESC [ 5 n). The
+# reply is buffered until the next prompt's readline reads it, firing the macro.
+__helpme_prefill() {
+  local text="$1"
+  text="${text//\\/\\\\}"   # escape backslashes for the readline macro
+  text="${text//\"/\\\"}"   # escape double quotes
+  bind "\"\\e[0n\": \"$text\"" 2>/dev/null
+  printf '\e[5n'
+}
 
 helpme() {
   if (( $# == 0 )); then
@@ -52,10 +63,5 @@ helpme() {
   local why="${out#*$'\n'}"      # remainder  = explanation
 
   printf '\033[33m» %s\033[0m\n' "$why"
-
-  # Prefill an editable line; Enter runs it.
-  local edited
-  if IFS= read -r -e -i "$fixed" -p "run> " edited; then
-    [ -n "$edited" ] && eval "$edited"
-  fi
+  __helpme_prefill "$fixed"
 }

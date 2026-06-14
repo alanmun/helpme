@@ -39,7 +39,8 @@ provider:
 helpme setup
 ```
 
-It prompts for provider, model, and key (key entry is hidden) and saves them to
+It prompts for provider, model, and key — your key is echoed as you paste (so
+you can see it landed) and a masked confirmation is printed — then saves them to
 `~/.config/helpme/config.json` (mode `0600`). That's it — no `export` lines in
 your shell rc.
 
@@ -105,9 +106,9 @@ are never committed (see `.gitignore`).
 
 ## How it's wired
 
-- **`helpme-bin`** (Go; only dependency is `golang.org/x/term` for hidden key
-  entry) does the LLM round-trip and `helpme setup`: it reads the failed command
-  + error and prints two lines — the corrected command, then the explanation.
+- **`helpme-bin`** (Go, no third-party dependencies) does the LLM round-trip and
+  `helpme setup`: it reads the failed command + error and prints two lines — the
+  corrected command, then the explanation.
 - **The shell wrapper** (`hooks/helpme.zsh` / `hooks/helpme.bash`) owns running
   the command, the success path, and prefilling the fix onto your prompt — the
   part a separate binary can't do, since only the shell can touch its own input
