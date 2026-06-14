@@ -86,7 +86,7 @@ case ":$PATH:" in
 esac
 
 echo
-echo "Done. Open a new shell (or: source $rc), then set your provider:"
-echo "  export HELPME_PROVIDER=anthropic        # or openai | openrouter | custom"
-echo "  export HELPME_API_KEY=sk-ant-...         # or just have ANTHROPIC_API_KEY set"
+echo "Done. Open a new shell (or: source $rc), then run:"
+echo "  helpme setup        # pick provider, paste key (hidden), choose model"
 echo "Then try:  helpme find -f myfile.txt"
+echo "(Prefer env vars? HELPME_API_KEY / ANTHROPIC_API_KEY etc. still work and override.)"
