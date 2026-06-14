@@ -15,9 +15,15 @@
 
 helpme() {
   if (( $# == 0 )); then
-    echo "usage: helpme <command>" >&2
+    echo "usage: helpme <command>   (or: helpme setup)" >&2
     return 1
   fi
+
+  # Meta sub-commands go straight to the binary instead of being run as commands.
+  case "$1" in
+    setup|--setup)  command helpme-bin setup;     return $? ;;
+    --version|-v)   command helpme-bin --version; return $? ;;
+  esac
 
   local errfile
   errfile=$(mktemp) || return 1

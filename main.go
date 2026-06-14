@@ -32,6 +32,9 @@ func main() {
 	// with a real command the wrapper forwards).
 	if len(args) > 0 {
 		switch args[0] {
+		case "setup":
+			runSetup()
+			return
 		case "--print-hook":
 			if len(args) < 2 {
 				fmt.Fprintln(os.Stderr, "usage: helpme-bin --print-hook zsh|bash")

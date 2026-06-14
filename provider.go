@@ -6,19 +6,19 @@
 // endpoint), and "custom" lets you point at anything else that does too —
 // Groq, Together, a local Ollama/LM Studio server, etc.
 //
-// Env vars:
+// Resolution precedence per setting is: env var > saved config (helpme setup) >
+// built-in default. This lets `helpme setup` be the no-fuss path while env vars
+// still override for power users and CI.
 //
 //	HELPME_PROVIDER  anthropic | openai | openrouter | custom   (default: anthropic)
 //	HELPME_API_KEY   the provider key (optional for local "custom" servers)
 //	HELPME_MODEL     override the default model for the chosen provider
 //	HELPME_BASE_URL  required for "custom"; also overrides any provider's URL
 //
-// If HELPME_API_KEY is unset, the provider's standard key var is used as a
-// fallback (ANTHROPIC_API_KEY / OPENAI_API_KEY / OPENROUTER_API_KEY) — so users
-// who already export one of those get zero-config usage. Only API keys are read
-// this way; helpme never touches subscription OAuth tokens (Claude Code /
-// Codex sign-in), whose consumer-plan entitlement isn't licensed to third-party
-// apps.
+// API key fallback chain: HELPME_API_KEY > config file > the provider's standard
+// var (ANTHROPIC_API_KEY / OPENAI_API_KEY / OPENROUTER_API_KEY). Only API keys
+// are read; helpme never touches subscription OAuth tokens (Claude Code / Codex
+// sign-in), whose consumer-plan entitlement isn't licensed to third-party apps.
 package main
 
 import (
@@ -47,47 +47,52 @@ var providerKeyEnv = map[string]string{
 	"openrouter": "OPENROUTER_API_KEY",
 }
 
+// pick returns the first non-empty of env var, config value, then default.
+func pick(envKey, cfgVal, def string) string {
+	if v := strings.TrimSpace(os.Getenv(envKey)); v != "" {
+		return v
+	}
+	if v := strings.TrimSpace(cfgVal); v != "" {
+		return v
+	}
+	return def
+}
+
 func loadProvider() (provider, error) {
-	name := strings.ToLower(strings.TrimSpace(os.Getenv("HELPME_PROVIDER")))
-	if name == "" {
-		name = "anthropic"
+	cfg := readConfig()
+
+	name := strings.ToLower(pick("HELPME_PROVIDER", cfg.Provider, "anthropic"))
+
+	d, known := providerDefaults[name]
+	if !known && name != "custom" {
+		return provider{}, fmt.Errorf("unknown provider %q (use anthropic|openai|openrouter|custom)", name)
 	}
 
-	var p provider
-	if d, ok := providerDefaults[name]; ok {
-		p.baseURL, p.model = d.baseURL, d.model
-	} else if name == "custom" {
-		p.baseURL = os.Getenv("HELPME_BASE_URL")
-		if p.baseURL == "" {
-			return p, fmt.Errorf("HELPME_PROVIDER=custom requires HELPME_BASE_URL")
-		}
-	} else {
-		return p, fmt.Errorf("unknown HELPME_PROVIDER %q (use anthropic|openai|openrouter|custom)", name)
+	p := provider{
+		baseURL: pick("HELPME_BASE_URL", cfg.BaseURL, d.baseURL),
+		model:   pick("HELPME_MODEL", cfg.Model, d.model),
 	}
 
-	if m := strings.TrimSpace(os.Getenv("HELPME_MODEL")); m != "" {
-		p.model = m
-	}
-	// Allow a base-URL override for any provider (e.g. a corporate proxy).
-	if b := strings.TrimSpace(os.Getenv("HELPME_BASE_URL")); b != "" {
-		p.baseURL = b
-	}
-
-	p.apiKey = strings.TrimSpace(os.Getenv("HELPME_API_KEY"))
+	// API key: HELPME_API_KEY > config > provider-standard env var.
+	p.apiKey = pick("HELPME_API_KEY", cfg.APIKey, "")
 	if p.apiKey == "" {
 		if ev := providerKeyEnv[name]; ev != "" {
 			p.apiKey = strings.TrimSpace(os.Getenv(ev))
 		}
 	}
-	if p.apiKey == "" && name != "custom" {
-		hint := "HELPME_API_KEY"
-		if ev := providerKeyEnv[name]; ev != "" {
-			hint += " or " + ev
-		}
-		return p, fmt.Errorf("no API key found; set %s", hint)
+
+	if p.baseURL == "" {
+		return p, fmt.Errorf("no base URL for provider %q; run 'helpme setup' or set HELPME_BASE_URL", name)
 	}
 	if p.model == "" {
-		return p, fmt.Errorf("no model selected; set HELPME_MODEL")
+		return p, fmt.Errorf("no model selected; run 'helpme setup' or set HELPME_MODEL")
+	}
+	if p.apiKey == "" && name != "custom" {
+		hint := "run 'helpme setup', or set HELPME_API_KEY"
+		if ev := providerKeyEnv[name]; ev != "" {
+			hint += " / " + ev
+		}
+		return p, fmt.Errorf("no API key found; %s", hint)
 	}
 	return p, nil
 }

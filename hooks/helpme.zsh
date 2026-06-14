@@ -15,9 +15,15 @@
 helpme() {
   emulate -L zsh
   if (( $# == 0 )); then
-    print -u2 "usage: helpme <command>"
+    print -u2 "usage: helpme <command>   (or: helpme setup)"
     return 1
   fi
+
+  # Meta sub-commands go straight to the binary instead of being run as commands.
+  case "$1" in
+    setup|--setup)  command helpme-bin setup;     return $? ;;
+    --version|-v)   command helpme-bin --version; return $? ;;
+  esac
 
   local errfile
   errfile=$(mktemp) || return 1
