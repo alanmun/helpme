@@ -23,10 +23,17 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strings"
 )
+
+// errNoAPIKey is the one "expected" misconfiguration: the user hasn't supplied a
+// key yet. main() detects it (errors.Is) and exits with a distinct code so the
+// shell wrapper shows this actionable message alone, without its generic
+// "couldn't get a fix" line piled on top.
+var errNoAPIKey = errors.New("no API key found")
 
 type provider struct {
 	baseURL string
@@ -115,7 +122,7 @@ func loadProvider() (provider, error) {
 		if ev := providerKeyEnv[name]; ev != "" {
 			hint += " / " + ev
 		}
-		return p, fmt.Errorf("no API key found; %s", hint)
+		return p, fmt.Errorf("%w; %s", errNoAPIKey, hint)
 	}
 	return p, nil
 }

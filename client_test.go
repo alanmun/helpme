@@ -26,6 +26,21 @@ func TestBuildRequest(t *testing.T) {
 	}
 }
 
+func TestBuildAskRequest(t *testing.T) {
+	// Ask mode reuses the same token/reasoning plumbing as fix mode.
+	openai := string(mustJSON(buildAskRequest(provider{model: "gpt-5.4-mini", reasoning: "low", maxCompletionTokens: true}, "how do I find big files?")))
+	if !strings.Contains(openai, `"max_completion_tokens"`) || strings.Contains(openai, `"max_tokens"`) {
+		t.Fatalf("openai ask should use max_completion_tokens only: %s", openai)
+	}
+	if !strings.Contains(openai, `"reasoning_effort":"low"`) {
+		t.Fatalf("openai ask should send reasoning_effort: %s", openai)
+	}
+	// It must use the ask system prompt (asks for "explanation"), not the fix one.
+	if !strings.Contains(openai, "explanation") {
+		t.Fatalf("ask request should carry the ask system prompt: %s", openai)
+	}
+}
+
 func mustJSON(v any) []byte {
 	b, err := json.Marshal(v)
 	if err != nil {
@@ -64,5 +79,55 @@ func TestParseFix(t *testing.T) {
 				t.Fatalf("cmd = %q, want %q", got.Cmd, c.wantCmd)
 			}
 		})
+	}
+}
+
+func TestParseAnswer(t *testing.T) {
+	cases := []struct {
+		name     string
+		in       string
+		wantCmd  string
+		wantExpl string
+		wantErr  bool
+	}{
+		{"with command", `{"explanation":"» -name matches by filename","command":"find . -name '*.log'"}`, "find . -name '*.log'", "» -name matches by filename", false},
+		{"no command key", `{"explanation":"Use Ctrl-R to search history"}`, "", "Use Ctrl-R to search history", false},
+		{"empty command", `{"explanation":"just an answer","command":""}`, "", "just an answer", false},
+		{"code fence", "```json\n{\"explanation\":\"x\",\"command\":\"ls\"}\n```", "ls", "x", false},
+		{"command newlines collapse", "{\"explanation\":\"x\",\"command\":\"echo \\na\"}", "echo  a", "x", false},
+		{"no json", `I cannot help`, "", "", true},
+		{"empty explanation", `{"explanation":"","command":"ls"}`, "", "", true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got, err := parseAnswer(c.in)
+			if c.wantErr {
+				if err == nil {
+					t.Fatalf("expected error, got %+v", got)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got.Command != c.wantCmd {
+				t.Fatalf("command = %q, want %q", got.Command, c.wantCmd)
+			}
+			if got.Explanation != c.wantExpl {
+				t.Fatalf("explanation = %q, want %q", got.Explanation, c.wantExpl)
+			}
+		})
+	}
+}
+
+func TestClampLines(t *testing.T) {
+	// More than 3 non-empty lines are trimmed to the first 3; blanks are dropped.
+	got := clampLines("one\n\ntwo\nthree\nfour", 3)
+	if got != "one\ntwo\nthree" {
+		t.Fatalf("clampLines = %q, want %q", got, "one\ntwo\nthree")
+	}
+	// Fewer than the cap is returned intact.
+	if got := clampLines("only one", 3); got != "only one" {
+		t.Fatalf("clampLines = %q, want %q", got, "only one")
 	}
 }

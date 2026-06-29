@@ -9,6 +9,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"strings"
 )
@@ -115,18 +117,66 @@ func prompt(in *bufio.Reader, label, def string) string {
 	return line
 }
 
-// promptKey reads the API key with normal (visible) echo — deliberately NOT
-// hidden input. This is a local, one-time setup and "did my paste actually
-// land?" matters more than hiding the key from your own screen. After capture
-// it prints a masked confirmation.
+// promptKey reads the API key with terminal echo OFF, so a pasted key never
+// shows on screen, then prints a masked confirmation (first chars + asterisks)
+// so you can still tell the right key landed. If stdin isn't a terminal
+// (piped/CI) or echo can't be disabled, it degrades to visible input.
 func promptKey(in *bufio.Reader) string {
 	fmt.Print("API key (blank to keep existing): ")
+	restore, hidden := disableEcho()
 	line, _ := in.ReadString('\n')
+	restore()
+	if hidden {
+		fmt.Println() // the user's Enter wasn't echoed; close the line ourselves
+	}
 	key := strings.TrimSpace(line)
 	if key != "" {
 		fmt.Println("  got:", maskKey(key))
 	}
 	return key
+}
+
+// disableEcho turns off terminal echo for stdin via `stty` and returns a
+// function that restores it. No third-party deps — stty is everywhere on the
+// linux/macOS targets helpme supports. Returns (no-op, false) when stdin isn't a
+// TTY or stty fails, so callers transparently fall back to visible input.
+func disableEcho() (restore func(), ok bool) {
+	noop := func() {}
+	if !isTerminal(os.Stdin) {
+		return noop, false
+	}
+	if runStty("-echo") != nil {
+		return noop, false
+	}
+	// Restore echo even if the user hits Ctrl-C mid-entry, so we never leave the
+	// terminal silent after an interrupt.
+	sig := make(chan os.Signal, 1)
+	done := make(chan struct{})
+	signal.Notify(sig, os.Interrupt)
+	go func() {
+		select {
+		case <-sig:
+			runStty("echo")
+			os.Exit(130) // 128 + SIGINT
+		case <-done:
+		}
+	}()
+	return func() {
+		signal.Stop(sig)
+		close(done)
+		runStty("echo")
+	}, true
+}
+
+func runStty(arg string) error {
+	cmd := exec.Command("stty", arg)
+	cmd.Stdin = os.Stdin // stty acts on the terminal connected to its stdin
+	return cmd.Run()
+}
+
+func isTerminal(f *os.File) bool {
+	fi, err := f.Stat()
+	return err == nil && (fi.Mode()&os.ModeCharDevice) != 0
 }
 
 func firstNonEmpty(vals ...string) string {

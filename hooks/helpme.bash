@@ -1,16 +1,23 @@
 # helpme — bash wrapper.
 #
-# Usage: helpme <command>
+# Usage:
+#   helpme <command>        run a command; fix it if it fails
+#   helpme "a question"     ask in plain language (a single quoted argument)
 #
-# Same behavior as the zsh version: run the command; on success print a green
-# confirmation with no LLM call; on failure send the command + its error to the
-# helpme binary, explain the fix, and offer the corrected command.
+# Run mode: run the command; on success print a green confirmation with no LLM
+# call; on failure send the command + its error to the helpme binary, explain the
+# fix, and offer the corrected command.
 #
-# On a fix, the corrected command is pushed onto your NEXT prompt (editable,
+# Ask mode: a single quoted argument containing whitespace is treated as a
+# natural-language question/request. It is NEVER executed — helpme just asks the
+# AI to explain it and, when the request maps to one, suggests a command.
+#
+# In both modes the suggested command is pushed onto your NEXT prompt (editable,
 # runs as a normal command, lands in history) using the readline trick below.
 #
-# Note: a `helpme`-prefixed command is executed as typed. Don't `helpme`
-# something destructive to "see if it works" — it will run.
+# Note: a `helpme`-prefixed *command* (run mode) is executed as typed. Don't
+# `helpme` something destructive to "see if it works" — it will run. (A quoted
+# question is safe; it never runs.)
 
 # __helpme_prefill — bash's equivalent of zsh `print -z`: put text on the next
 # prompt's command line. We bind the terminal's status-report reply (ESC [ 0 n)
@@ -26,7 +33,7 @@ __helpme_prefill() {
 
 helpme() {
   if (( $# == 0 )); then
-    echo "usage: helpme <command>   (or: helpme setup)" >&2
+    echo 'usage: helpme <command>   (or: helpme "a question", helpme setup)' >&2
     return 1
   fi
 
@@ -35,6 +42,25 @@ helpme() {
     setup|--setup)  command helpme-bin setup;     return $? ;;
     --version|-v)   command helpme-bin --version; return $? ;;
   esac
+
+  # Ask mode: a single quoted argument containing whitespace is a plain-language
+  # question, not a command. We never run it — just ask the AI to explain and (if
+  # it maps to one) suggest a command to prefill.
+  if (( $# == 1 )) && [[ "$1" == *[[:space:]]* ]]; then
+    local out rc
+    out=$(command helpme-bin --ask "$1"); rc=$?
+    if (( rc != 0 )); then
+      # rc==3 means "no API key yet": the binary already printed the setup hint.
+      (( rc == 3 )) || printf '\033[31m✘ helpme could not answer that.\033[0m\n'
+      return $rc
+    fi
+    local suggested="${out%%$'\n'*}"   # first line = suggested command (may be empty)
+    local explanation="${out#*$'\n'}"  # remainder  = explanation to teach
+    # %s keeps the model's text out of the format string, so a stray % is safe.
+    printf '\033[33m%s\033[0m\n' "$explanation"
+    [[ -n "$suggested" ]] && __helpme_prefill "$suggested"
+    return 0
+  fi
 
   local errfile
   errfile=$(mktemp) || return 1
@@ -53,9 +79,12 @@ helpme() {
   errtext=$(<"$errfile")
   rm -f "$errfile"
 
-  local out
-  if ! out=$(command helpme-bin "$@" <<< "$errtext"); then
-    printf '\033[31m✘ helpme could not get a fix.\033[0m\n'
+  local out rc
+  out=$(command helpme-bin "$@" <<< "$errtext"); rc=$?
+  if (( rc != 0 )); then
+    # rc==3 means "no API key yet": the binary already printed an actionable
+    # setup message to stderr, so don't pile the generic failure line on top.
+    (( rc == 3 )) || printf '\033[31m✘ helpme could not get a fix.\033[0m\n'
     return $status
   fi
 
