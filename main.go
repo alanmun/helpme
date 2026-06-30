@@ -9,8 +9,9 @@
 //
 // It also has an "ask" mode (--ask "<question>"): given a natural-language
 // request, it prints the optional suggested command on line 1 (empty if none)
-// and a short explanation on the lines after. The shell wrapper routes a single
-// quoted argument here instead of running it.
+// and a formatted explanation on the lines after — a » prefix for a one-liner,
+// or a box when it's multi-line. The shell wrapper routes a single quoted
+// argument here instead of running it.
 //
 // The shell wrapper (hooks/helpme.{zsh,bash}) owns running the command and
 // prefilling the corrected one onto the next prompt. This binary only performs
@@ -43,7 +44,7 @@ func main() {
 	// with a real command the wrapper forwards).
 	if len(args) > 0 {
 		switch args[0] {
-		case "setup":
+		case "setup", "--setup", "-s":
 			runSetup()
 			return
 		case "--ask":
@@ -95,7 +96,7 @@ func main() {
 // runAsk handles "ask" mode: answer a natural-language question and, when it maps
 // to one, suggest a command. Output mirrors fix mode so the wrapper can reuse its
 // parsing — line 1 is the command (empty when there isn't one), the rest is the
-// explanation (up to 3 lines).
+// formatted explanation (a » line, or a box when multi-line).
 func runAsk(query string) {
 	p := loadProviderOrExit()
 
@@ -105,8 +106,8 @@ func runAsk(query string) {
 		os.Exit(1)
 	}
 
-	fmt.Println(a.Command)     // line 1: suggested command, or empty
-	fmt.Println(a.Explanation) // line 2+: explanation
+	fmt.Println(a.Command)                        // line 1: suggested command, or empty
+	fmt.Println(renderExplanation(a.Explanation)) // line 2+: formatted explanation
 }
 
 // loadProviderOrExit resolves the provider or exits with an actionable message.

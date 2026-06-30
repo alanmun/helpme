@@ -47,6 +47,13 @@ esac
 asset="helpme-bin-${os}-${arch}"
 mkdir -p "$BIN_DIR" "$HOOK_DIR"
 
+# Note any existing install so the closing message can say "updated" vs
+# "installed" — re-running this script is the supported way to update.
+prev_version=""
+if [ -x "$BIN_DIR/helpme-bin" ]; then
+  prev_version=$("$BIN_DIR/helpme-bin" --version 2>/dev/null | awk '{print $NF}')
+fi
+
 echo "Downloading $asset"
 if command -v curl >/dev/null 2>&1; then
   curl -fsSL "$base/$asset" -o "$BIN_DIR/helpme-bin"
@@ -86,7 +93,23 @@ case ":$PATH:" in
 esac
 
 echo
-echo "Done. Open a new shell (or: source $rc), then run:"
-echo "  helpme setup        # pick provider, paste key (hidden), choose model"
-echo "Then try:  helpme find -f myfile.txt"
-echo "(Prefer env vars? HELPME_API_KEY / ANTHROPIC_API_KEY etc. still work and override.)"
+new_version=$("$BIN_DIR/helpme-bin" --version 2>/dev/null | awk '{print $NF}')
+if [ -z "$prev_version" ]; then
+  echo "Installed helpme ${new_version:-(unknown)}."
+elif [ "$prev_version" = "$new_version" ]; then
+  echo "helpme is already up to date (${new_version:-?})."
+else
+  echo "Updated helpme: $prev_version -> ${new_version:-?}."
+fi
+
+# Skip the setup nudge if there's already a saved config — re-runs are updates,
+# and an existing user doesn't need to be told to set up again.
+config_file="${XDG_CONFIG_HOME:-$HOME/.config}/helpme/config.json"
+if [ -f "$config_file" ]; then
+  echo "Open a new shell (or: source $rc) to pick up the changes."
+else
+  echo "Open a new shell (or: source $rc), then run:"
+  echo "  helpme --setup      # pick provider, paste key (hidden), choose model"
+  echo "Then try:  helpme find -f myfile.txt"
+  echo "(Prefer env vars? HELPME_API_KEY / ANTHROPIC_API_KEY etc. still work and override.)"
+fi

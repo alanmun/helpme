@@ -46,9 +46,20 @@ A quoted question is **never executed** — only your AI sees it. (helpme treats
 single argument that contains spaces as a question; an unquoted command like
 `helpme find -f x` still runs.)
 
-The explanation is deliberately short — at most three lines, with `»` marking the
-parts worth learning (and a mnemonic when one exists). This is a fast nudge, not
-an essay.
+The explanation is deliberately short — a `»` one-liner for a simple answer, or a
+tidy box that breaks down each flag/argument (with a mnemonic when one exists).
+A fast nudge, not an essay:
+
+```
+$ helpme "search this folder for 'help' by file and line"
+┌────────────────────────────────────────────────────────────────┐
+│ -r recurse into subdirectories                                 │
+│ -n show line numbers                                           │
+│ 'help' the search pattern, quoted so the shell leaves it alone │
+│ . the path to search                                           │
+└────────────────────────────────────────────────────────────────┘
+$ grep -rn 'help' .                ← prefilled, edit or press Enter
+```
 
 ## Bring your own AI
 
@@ -65,7 +76,7 @@ provider:
 **Easiest — run the wizard** (no env vars to babysit):
 
 ```sh
-helpme setup
+helpme --setup      # or: helpme -s
 ```
 
 It prompts for provider, model, and key. The key is read with echo off (it
@@ -84,7 +95,8 @@ low reasoning) and may 400 on the field. Override with `HELPME_REASONING`
 (`low`/`medium`/`high`/`minimal`/`off`) or the `reasoning` config key.
 
 **Prefer env vars / CI?** They still work and **override the config file**:
-`HELPME_PROVIDER`, `HELPME_API_KEY`, `HELPME_MODEL`, `HELPME_BASE_URL`. And if
+`HELPME_PROVIDER`, `HELPME_API_KEY`, `HELPME_MODEL`, `HELPME_BASE_URL`,
+`HELPME_TIMEOUT` (request timeout in seconds, default `30`). And if
 `HELPME_API_KEY` is unset, helpme falls back to the provider's standard var
 (`ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `OPENROUTER_API_KEY`). Full precedence
 per setting: **env var > config file > built-in default**.
@@ -99,7 +111,7 @@ per setting: **env var > config file > built-in default**.
 No Go toolchain needed — the installer downloads a prebuilt static binary:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/alanmun/helpme/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/alanmun/helpme/master/install.sh | sh
 ```
 
 It detects your OS/arch, drops `helpme-bin` into `~/.local/bin`, writes the
@@ -108,13 +120,28 @@ shell hook (emitted from the binary, so it always matches), and adds one
 provider env vars, done. Linux and macOS (Intel + Apple Silicon); on Windows,
 use WSL.
 
-### Local testing / build from source
+### Updating
 
-No release needed — build and wire up the hook in one step (requires Go):
+Re-running the installer **is** the update — it downloads the latest binary and
+refreshes the hook in place (and won't nag you to set up again if you already
+have a config). From inside helpme:
 
 ```sh
-./dev-install.sh
+helpme --update      # or: helpme -u
 ```
+
+### Local testing / build from source
+
+No release needed — build and wire up the hook in one step (requires Go).
+**Source** it to also load `helpme` into your current shell (no new shell, no
+manual `source` afterward):
+
+```sh
+source ./dev-install.sh
+```
+
+Running it as `./dev-install.sh` still builds and installs, but a child process
+can't change your shell, so you'd then open a new shell or `source ~/.zshrc`.
 
 Or do it by hand:
 
@@ -147,7 +174,7 @@ binaries are never committed (see `.gitignore`).
 ## How it's wired
 
 - **`helpme-bin`** (Go, no third-party dependencies) does the LLM round-trips and
-  `helpme setup`. In fix mode it reads the failed command + error; in ask mode
+  `helpme --setup`. In fix mode it reads the failed command + error; in ask mode
   (`--ask "<question>"`) it reads a plain-language request. Both print two parts —
   a suggested command on line 1 (empty when there isn't one), then the
   explanation — so the wrapper parses them the same way.
@@ -155,6 +182,28 @@ binaries are never committed (see `.gitignore`).
   mode to use (a single quoted argument → ask), owns running the command, the
   success path, and prefilling the suggestion onto your prompt — the part a
   separate binary can't do, since only the shell can touch its own input line.
+
+## Troubleshooting
+
+helpme keeps **no logs by default** — your commands and prompts never touch
+disk. When something misbehaves, turn logging on for a run:
+
+```sh
+HELPME_DEBUG=1 helpme <command>            # full request/response to stderr
+HELPME_LOG=~/.config/helpme/helpme.log helpme <command>   # append to a file
+```
+
+The log shows the exact endpoint, request body, HTTP status, timing, and the
+raw model response (the `Authorization` header / your key is never logged).
+That distinguishes the common failures:
+
+- `empty response body (HTTP 200 …)` — the provider returned nothing; usually a
+  timeout or rate limit. Bump `HELPME_TIMEOUT` (seconds) for slow/reasoning
+  models.
+- `could not parse model JSON … got "…"` — the model wrapped its JSON in prose;
+  the raw text it returned is shown so you can see what happened.
+- `api 4xx/5xx: …` — the provider rejected the request (bad key, model name, or
+  an unsupported field); the provider's own message is included.
 
 ## A caveat worth knowing
 

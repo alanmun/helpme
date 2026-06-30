@@ -3,6 +3,9 @@
 # Usage:
 #   helpme <command>        run a command; fix it if it fails
 #   helpme "a question"     ask in plain language (a single quoted argument)
+#   helpme --setup | -s     run the config wizard
+#   helpme --update | -u    update to the latest release
+#   helpme --version | -v   print the version
 #
 # Run mode: run the command; on success print a green confirmation with no LLM
 # call; on failure send the command + its error to the helpme binary, explain the
@@ -31,16 +34,35 @@ __helpme_prefill() {
   printf '\e[5n'
 }
 
+# __helpme_update — re-run the installer, which downloads the latest binary and
+# refreshes the hook in place. Override the source with HELPME_REPO/HELPME_INSTALL_BRANCH.
+__helpme_update() {
+  local repo="${HELPME_REPO:-alanmun/helpme}"
+  local branch="${HELPME_INSTALL_BRANCH:-master}"
+  local url="https://raw.githubusercontent.com/$repo/$branch/install.sh"
+  echo "Updating helpme from $url"
+  if command -v curl >/dev/null 2>&1; then
+    curl -fsSL "$url" | sh
+  elif command -v wget >/dev/null 2>&1; then
+    wget -qO- "$url" | sh
+  else
+    echo "helpme: need curl or wget to update" >&2
+    return 1
+  fi
+}
+
 helpme() {
   if (( $# == 0 )); then
-    echo 'usage: helpme <command>   (or: helpme "a question", helpme setup)' >&2
+    echo 'usage: helpme <command>   (or: helpme "a question", helpme --setup, helpme --update)' >&2
     return 1
   fi
 
-  # Meta sub-commands go straight to the binary instead of being run as commands.
+  # Meta flags control helpme itself; everything else is your command or question.
+  # They're --flags (not bare words) so they can't shadow a real command.
   case "$1" in
-    setup|--setup)  command helpme-bin setup;     return $? ;;
-    --version|-v)   command helpme-bin --version; return $? ;;
+    --setup|-s)    command helpme-bin --setup;   return $? ;;
+    --update|-u)   __helpme_update;              return $? ;;
+    --version|-v)  command helpme-bin --version; return $? ;;
   esac
 
   # Ask mode: a single quoted argument containing whitespace is a plain-language

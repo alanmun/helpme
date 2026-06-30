@@ -3,6 +3,9 @@
 # Usage:
 #   helpme <command>        run a command; fix it if it fails
 #   helpme "a question"     ask in plain language (a single quoted argument)
+#   helpme --setup | -s     run the config wizard
+#   helpme --update | -u    update to the latest release
+#   helpme --version | -v   print the version
 #
 # Run mode: runs the command. If it succeeds, prints a green confirmation and
 # stops — no LLM call, no tokens spent. If it fails, sends the command plus its
@@ -18,17 +21,37 @@
 # command usually just errors harmlessly, but don't `helpme` something
 # destructive to "see if it works" — it will run. (A quoted question is safe.)
 
+# __helpme_update — re-run the installer, which downloads the latest binary and
+# refreshes the hook in place. Override the source with HELPME_REPO/HELPME_INSTALL_BRANCH.
+__helpme_update() {
+  emulate -L zsh
+  local repo="${HELPME_REPO:-alanmun/helpme}"
+  local branch="${HELPME_INSTALL_BRANCH:-master}"
+  local url="https://raw.githubusercontent.com/$repo/$branch/install.sh"
+  print "Updating helpme from $url"
+  if (( $+commands[curl] )); then
+    curl -fsSL "$url" | sh
+  elif (( $+commands[wget] )); then
+    wget -qO- "$url" | sh
+  else
+    print -u2 "helpme: need curl or wget to update"
+    return 1
+  fi
+}
+
 helpme() {
   emulate -L zsh
   if (( $# == 0 )); then
-    print -u2 'usage: helpme <command>   (or: helpme "a question", helpme setup)'
+    print -u2 'usage: helpme <command>   (or: helpme "a question", helpme --setup, helpme --update)'
     return 1
   fi
 
-  # Meta sub-commands go straight to the binary instead of being run as commands.
+  # Meta flags control helpme itself; everything else is your command or question.
+  # They're --flags (not bare words) so they can't shadow a real command.
   case "$1" in
-    setup|--setup)  command helpme-bin setup;     return $? ;;
-    --version|-v)   command helpme-bin --version; return $? ;;
+    --setup|-s)    command helpme-bin --setup;   return $? ;;
+    --update|-u)   __helpme_update;              return $? ;;
+    --version|-v)  command helpme-bin --version; return $? ;;
   esac
 
   # Ask mode: a single quoted argument containing whitespace is a plain-language

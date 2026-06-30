@@ -26,7 +26,9 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
+	"time"
 )
 
 // errNoAPIKey is the one "expected" misconfiguration: the user hasn't supplied a
@@ -43,7 +45,14 @@ type provider struct {
 	reasoning string
 	// OpenAI's reasoning models reject max_tokens and want max_completion_tokens.
 	maxCompletionTokens bool
+	// timeout bounds the whole round-trip (connect + body read). Reasoning models
+	// can be slow, so it's generous by default and tunable via HELPME_TIMEOUT.
+	timeout time.Duration
 }
+
+// defaultTimeout is intentionally roomy: a too-tight deadline fires mid-body-read
+// and surfaces as a baffling "empty/short response" rather than a clear timeout.
+const defaultTimeout = 30 * time.Second
 
 // Defaults: a capable-but-fast model at low reasoning — smart enough to fix a
 // command, never slow enough to write an essay.
@@ -103,6 +112,12 @@ func loadProvider() (provider, error) {
 	}
 	p.reasoning = reasoning
 
+	// Timeout (seconds) via HELPME_TIMEOUT; ignore junk/non-positive values.
+	p.timeout = defaultTimeout
+	if n, err := strconv.Atoi(strings.TrimSpace(os.Getenv("HELPME_TIMEOUT"))); err == nil && n > 0 {
+		p.timeout = time.Duration(n) * time.Second
+	}
+
 	// API key: HELPME_API_KEY > config > provider-standard env var.
 	p.apiKey = pick("HELPME_API_KEY", cfg.APIKey, "")
 	if p.apiKey == "" {
@@ -112,13 +127,13 @@ func loadProvider() (provider, error) {
 	}
 
 	if p.baseURL == "" {
-		return p, fmt.Errorf("no base URL for provider %q; run 'helpme setup' or set HELPME_BASE_URL", name)
+		return p, fmt.Errorf("no base URL for provider %q; run 'helpme --setup' or set HELPME_BASE_URL", name)
 	}
 	if p.model == "" {
-		return p, fmt.Errorf("no model selected; run 'helpme setup' or set HELPME_MODEL")
+		return p, fmt.Errorf("no model selected; run 'helpme --setup' or set HELPME_MODEL")
 	}
 	if p.apiKey == "" && name != "custom" {
-		hint := "run 'helpme setup', or set HELPME_API_KEY"
+		hint := "run 'helpme --setup', or set HELPME_API_KEY"
 		if ev := providerKeyEnv[name]; ev != "" {
 			hint += " / " + ev
 		}

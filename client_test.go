@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 func TestBuildRequest(t *testing.T) {
@@ -59,6 +60,11 @@ func TestParseFix(t *testing.T) {
 		{"plain json", `{"cmd":"find . -name x","why":"use -name"}`, "find . -name x", false},
 		{"code fence", "```json\n{\"cmd\":\"ls -la\",\"why\":\"long form\"}\n```", "ls -la", false},
 		{"prose wrapped", `Sure! {"cmd":"grep -r foo .","why":"recurse"} hope that helps`, "grep -r foo .", false},
+		// Regression: chatty model appends prose (containing a 'z' and a later
+		// brace). First-brace-to-last-brace used to sweep it in and fail with
+		// "invalid character 'z' after top-level value".
+		{"trailing prose with brace", `{"cmd":"tar -xf a.tar","why":"plain tar, drop -z"} note: zellij is {neat}`, "tar -xf a.tar", false},
+		{"brace inside string value", `{"cmd":"echo {x}","why":"braces ok"}`, "echo {x}", false},
 		{"newline in cmd collapses", "{\"cmd\":\"echo \\na\",\"why\":\"x\"}", "echo  a", false},
 		{"no json", `I cannot help with that`, "", true},
 		{"empty cmd", `{"cmd":"","why":"nothing"}`, "", true},
@@ -117,6 +123,41 @@ func TestParseAnswer(t *testing.T) {
 				t.Fatalf("explanation = %q, want %q", got.Explanation, c.wantExpl)
 			}
 		})
+	}
+}
+
+func TestRenderExplanation(t *testing.T) {
+	// A single line gets the » teaching prefix, no box.
+	if got := renderExplanation("Use Ctrl-R to search history"); got != "» Use Ctrl-R to search history" {
+		t.Fatalf("single line = %q, want a » prefix", got)
+	}
+
+	// A multi-line explanation is boxed: top border, one row per line, bottom border.
+	got := renderExplanation("-r recurse\n-n line numbers")
+	lines := strings.Split(got, "\n")
+	if len(lines) != 4 {
+		t.Fatalf("want 4 lines (top, 2 content, bottom), got %d:\n%s", len(lines), got)
+	}
+	if !strings.HasPrefix(lines[0], "┌") || !strings.HasSuffix(lines[0], "┐") {
+		t.Fatalf("top border malformed: %q", lines[0])
+	}
+	if !strings.HasPrefix(lines[len(lines)-1], "└") || !strings.HasSuffix(lines[len(lines)-1], "┘") {
+		t.Fatalf("bottom border malformed: %q", lines[len(lines)-1])
+	}
+	// Content must appear inside the box.
+	if !strings.Contains(got, "-r recurse") || !strings.Contains(got, "-n line numbers") {
+		t.Fatalf("box dropped content:\n%s", got)
+	}
+	// Every row is the same display width — the right border lines up.
+	w := utf8.RuneCountInString(lines[0])
+	for i, ln := range lines {
+		if rw := utf8.RuneCountInString(ln); rw != w {
+			t.Fatalf("row %d width %d != %d: %q", i, rw, w, ln)
+		}
+	}
+	// Widest content is "-n line numbers" (15 runes); box = 15 + "│ "/" │" + borders = 19.
+	if w != 19 {
+		t.Fatalf("box width = %d, want 19", w)
 	}
 }
 
