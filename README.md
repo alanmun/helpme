@@ -1,6 +1,20 @@
 # helpme
 
-A terminal helper with two modes.
+Ever started typing a command into your shell and realize you forgot how to use it? With AI, shouldn't there a be a fast way to learn the command and run it?
+
+```bash
+alanmun@ubuntumachine:~/Repositories/my-codebase$ helpme git reset to undo a single commit I made so I can commit it to a diff branch
+fatal: ambiguous argument 'to': unknown revision or path not in the working tree.
+Use '--' to separate paths from revisions, like this:
+'git <command> [<revision>...] -- [<file>...]'
+» Use git reset HEAD~1 to undo the last commit and keep your changes.
+alanmun@Xbox720:~/Repositories/troutwood/plaid-service$ git reset HEAD~1
+Unstaged changes after reset:
+M       handler.py
+D       install-vscode-extensions.sh
+M       products/investments.py
+
+```
 
 ### 1. Fix a command — prefix it with `helpme`
 
@@ -10,8 +24,8 @@ helpme find -f Volumes.lua
 
 - **If the command already works,** it just runs — and you get a green
   `✔ This command already works!`. No AI call, no tokens, no waiting.
-- **If it fails,** helpme sends the command *and its actual error* to an AI,
-  prints a one-line explanation of what went wrong, and drops the corrected
+- **If it fails,** helpme sends the command *and its actual error* to your LLM,
+  prints a quick explanation of what went wrong/what you meant to do, and drops the corrected
   command onto your next prompt to edit or run.
 
 ```
@@ -61,7 +75,7 @@ $ helpme "search this folder for 'help' by file and line"
 $ grep -rn 'help' .                ← prefilled, edit or press Enter
 ```
 
-## Bring your own AI
+## BYOAI (Bring your own AI)
 
 helpme talks to any OpenAI-style `/chat/completions` endpoint, so you choose the
 provider:
