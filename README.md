@@ -8,7 +8,7 @@ fatal: ambiguous argument 'to': unknown revision or path not in the working tree
 Use '--' to separate paths from revisions, like this:
 'git <command> [<revision>...] -- [<file>...]'
 » Use git reset HEAD~1 to undo the last commit and keep your changes.
-alanmun@Xbox720:~/Repositories/troutwood/plaid-service$ git reset HEAD~1
+alanmun@ubuntumachine:~/Repositories/my-codebase$ git reset HEAD~1
 Unstaged changes after reset:
 M       handler.py
 D       install-vscode-extensions.sh
