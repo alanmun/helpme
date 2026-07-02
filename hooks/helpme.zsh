@@ -59,7 +59,7 @@ helpme() {
   # it maps to one) suggest a command to prefill.
   if (( $# == 1 )) && [[ "$1" == *[[:space:]]* ]]; then
     local out
-    out=$(command helpme-bin --ask "$1")
+    out=$(HELPME_SHELL=zsh command helpme-bin --ask "$1")
     local rc=$?
     if (( rc != 0 )); then
       # rc==3 means "no API key yet": the binary already printed the setup hint.
@@ -93,7 +93,7 @@ helpme() {
   command rm -f "$errfile"
 
   local out
-  out=$(command helpme-bin "$@" <<< "$errtext")
+  out=$(HELPME_SHELL=zsh command helpme-bin "$@" <<< "$errtext")
   local rc=$?
   if (( rc != 0 )); then
     # rc==3 means "no API key yet": the binary already printed an actionable

@@ -107,13 +107,13 @@ func newChatReq(p provider, maxOut int, system, user string) chatReq {
 
 func buildRequest(p provider, command, errText string) chatReq {
 	// 1024: headroom for reasoning tokens; the JSON answer is tiny.
-	return newChatReq(p, 1024, systemPrompt,
+	return newChatReq(p, 1024, systemPromptWithEnv(systemPrompt),
 		fmt.Sprintf("Command:\n%s\n\nError:\n%s", command, strings.TrimSpace(errText)))
 }
 
 func buildAskRequest(p provider, query string) chatReq {
 	// 2048: a little more room than fix mode for a 3-line explanation.
-	return newChatReq(p, 2048, askPrompt, strings.TrimSpace(query))
+	return newChatReq(p, 2048, systemPromptWithEnv(askPrompt), strings.TrimSpace(query))
 }
 
 // chat performs one round-trip and returns the model's message content, or an

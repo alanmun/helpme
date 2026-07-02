@@ -201,6 +201,10 @@ binaries are never committed (see `.gitignore`).
   mode to use (a single quoted argument → ask), owns running the command, the
   success path, and prefilling the suggestion onto your prompt — the part a
   separate binary can't do, since only the shell can touch its own input line.
+  It also sets `HELPME_SHELL` before calling `helpme-bin`, so the model is told
+  which shell and platform it's fixing commands for (e.g. bash under MSYS2 on
+  Windows) instead of guessing from surface cues and reaching for the wrong
+  tool family (like `findstr` for a Windows path when the shell is really bash).
 
 ## Troubleshooting
 

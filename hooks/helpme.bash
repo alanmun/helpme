@@ -70,7 +70,7 @@ helpme() {
   # it maps to one) suggest a command to prefill.
   if (( $# == 1 )) && [[ "$1" == *[[:space:]]* ]]; then
     local out rc
-    out=$(command helpme-bin --ask "$1"); rc=$?
+    out=$(HELPME_SHELL=bash command helpme-bin --ask "$1"); rc=$?
     if (( rc != 0 )); then
       # rc==3 means "no API key yet": the binary already printed the setup hint.
       (( rc == 3 )) || printf '\033[31m✘ helpme could not answer that.\033[0m\n'
@@ -102,7 +102,7 @@ helpme() {
   rm -f "$errfile"
 
   local out rc
-  out=$(command helpme-bin "$@" <<< "$errtext"); rc=$?
+  out=$(HELPME_SHELL=bash command helpme-bin "$@" <<< "$errtext"); rc=$?
   if (( rc != 0 )); then
     # rc==3 means "no API key yet": the binary already printed an actionable
     # setup message to stderr, so don't pile the generic failure line on top.
