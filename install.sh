@@ -28,12 +28,18 @@ else
   base="https://github.com/$REPO/releases/download/$VERSION"
 fi
 
-# Normalize OS.
+# Normalize OS. `ext` is the executable suffix — ".exe" on native Windows.
 os=$(uname -s | tr '[:upper:]' '[:lower:]')
+ext=""
 case "$os" in
   linux)  os=linux ;;
   darwin) os=darwin ;;
-  *) echo "unsupported OS: $os (helpme targets linux/macOS; on Windows use WSL)" >&2; exit 1 ;;
+  msys*|mingw*|cygwin*)
+    # MSYS2 / Git Bash / Cygwin: POSIX bash on top of native Windows. The bash
+    # hook works as-is; we just fetch the native Windows binary (.exe), which
+    # this bash can run directly. (Full WSL reports as plain "linux" above.)
+    os=windows; ext=".exe" ;;
+  *) echo "unsupported OS: $os (helpme targets linux/macOS/Windows; on native Windows use MSYS2, Git Bash, Cygwin, or WSL)" >&2; exit 1 ;;
 esac
 
 # Normalize arch.
@@ -44,25 +50,26 @@ case "$arch" in
   *) echo "unsupported arch: $arch" >&2; exit 1 ;;
 esac
 
-asset="helpme-bin-${os}-${arch}"
+asset="helpme-bin-${os}-${arch}${ext}"
+bin="$BIN_DIR/helpme-bin${ext}"
 mkdir -p "$BIN_DIR" "$HOOK_DIR"
 
 # Note any existing install so the closing message can say "updated" vs
 # "installed" — re-running this script is the supported way to update.
 prev_version=""
-if [ -x "$BIN_DIR/helpme-bin" ]; then
-  prev_version=$("$BIN_DIR/helpme-bin" --version 2>/dev/null | awk '{print $NF}')
+if [ -x "$bin" ]; then
+  prev_version=$("$bin" --version 2>/dev/null | awk '{print $NF}')
 fi
 
 echo "Downloading $asset"
 if command -v curl >/dev/null 2>&1; then
-  curl -fsSL "$base/$asset" -o "$BIN_DIR/helpme-bin"
+  curl -fsSL "$base/$asset" -o "$bin"
 elif command -v wget >/dev/null 2>&1; then
-  wget -qO "$BIN_DIR/helpme-bin" "$base/$asset"
+  wget -qO "$bin" "$base/$asset"
 else
   echo "need curl or wget to download" >&2; exit 1
 fi
-chmod +x "$BIN_DIR/helpme-bin"
+chmod +x "$bin"
 
 # Emit the shell hook from the binary itself (always version-matched).
 shell_name=$(basename "${SHELL:-}")
@@ -70,14 +77,14 @@ case "$shell_name" in
   zsh)  rc="$HOME/.zshrc";  hookfile="$HOOK_DIR/helpme.zsh" ;;
   bash) rc="$HOME/.bashrc"; hookfile="$HOOK_DIR/helpme.bash" ;;
   *)
-    echo "Binary installed to $BIN_DIR/helpme-bin."
+    echo "Binary installed to $bin."
     echo "Unrecognized shell '$shell_name' — write a hook manually, e.g.:"
     echo "  helpme-bin --print-hook zsh > $HOOK_DIR/helpme.zsh && source $HOOK_DIR/helpme.zsh"
     exit 0
     ;;
 esac
 
-"$BIN_DIR/helpme-bin" --print-hook "$shell_name" > "$hookfile"
+"$bin" --print-hook "$shell_name" > "$hookfile"
 
 line="source \"$hookfile\""
 if ! grep -qsF "$line" "$rc"; then
@@ -93,7 +100,7 @@ case ":$PATH:" in
 esac
 
 echo
-new_version=$("$BIN_DIR/helpme-bin" --version 2>/dev/null | awk '{print $NF}')
+new_version=$("$bin" --version 2>/dev/null | awk '{print $NF}')
 if [ -z "$prev_version" ]; then
   echo "Installed helpme ${new_version:-(unknown)}."
 elif [ "$prev_version" = "$new_version" ]; then

@@ -131,8 +131,13 @@ curl -fsSL https://raw.githubusercontent.com/alanmun/helpme/master/install.sh | 
 It detects your OS/arch, drops `helpme-bin` into `~/.local/bin`, writes the
 shell hook (emitted from the binary, so it always matches), and adds one
 `source` line to your `~/.zshrc` or `~/.bashrc`. Open a new shell, set your
-provider env vars, done. Linux and macOS (Intel + Apple Silicon); on Windows,
-use WSL.
+provider env vars, done. Linux and macOS (Intel + Apple Silicon).
+
+**Windows:** run the same one-liner from **MSYS2**, **Git Bash**, or **Cygwin**
+— these are POSIX bash on top of Windows, so the installer fetches the native
+`helpme-bin.exe` and wires up the bash hook exactly as on Linux (works in the
+mintty terminal these ship with). Plain **PowerShell/cmd** aren't supported yet
+— use one of the above, or **WSL** (which installs as regular Linux).
 
 ### Updating
 

@@ -16,14 +16,17 @@ OUT="${OUT:-dist}"
 rm -rf "$OUT"
 mkdir -p "$OUT"
 
-# os/arch targets. Windows is omitted: helpme is shell-hook based, so Windows
-# users run it under WSL (which is linux/amd64 or linux/arm64).
-targets="linux/amd64 linux/arm64 darwin/amd64 darwin/arm64"
+# os/arch targets. Windows ships too: the shell hook is bash, and MSYS2 / Git
+# Bash / Cygwin are POSIX bash on top of native Windows that run native .exe
+# binaries (so does WSL, but WSL is just linux/amd64|arm64).
+targets="linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64"
 
 for t in $targets; do
   os=${t%/*}
   arch=${t#*/}
-  name="helpme-bin-${os}-${arch}"
+  ext=""
+  [ "$os" = windows ] && ext=".exe"   # native Windows executables need the suffix
+  name="helpme-bin-${os}-${arch}${ext}"
   echo "building $name"
   CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" \
     go build -trimpath -ldflags "-s -w -X main.version=$VERSION" -o "$OUT/$name" .

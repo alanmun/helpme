@@ -36,6 +36,11 @@ _helpme_dev_install() {
   hook_dir="${HELPME_HOOK_DIR:-$HOME/.config/helpme}"
   mkdir -p "$_helpme_bindir" "$hook_dir" || return 1
 
+  # On native Windows (MSYS2 / Git Bash / Cygwin) the binary needs a .exe suffix.
+  bin_ext=""
+  case "$(uname -s)" in MSYS*|MINGW*|CYGWIN*) bin_ext=".exe" ;; esac
+  bin="$_helpme_bindir/helpme-bin$bin_ext"
+
   if ! command -v go >/dev/null 2>&1; then
     echo "Go not found on PATH." >&2
     echo "If you used the repo's local Go install, run this first:" >&2
@@ -44,8 +49,8 @@ _helpme_dev_install() {
     return 1
   fi
 
-  echo "Building helpme-bin -> $_helpme_bindir/helpme-bin"
-  ( cd "$repo_dir" && go build -o "$_helpme_bindir/helpme-bin" . ) \
+  echo "Building helpme-bin -> $bin"
+  ( cd "$repo_dir" && go build -o "$bin" . ) \
     || { echo "helpme: build failed" >&2; return 1; }
 
   # Wire up the running shell when sourced (most accurate), else fall back to $SHELL.
@@ -62,7 +67,7 @@ _helpme_dev_install() {
       ;;
   esac
 
-  "$_helpme_bindir/helpme-bin" --print-hook "$shell_name" > "$hookfile" || return 1
+  "$bin" --print-hook "$shell_name" > "$hookfile" || return 1
 
   line="source \"$hookfile\""
   if ! grep -qsF "$line" "$rc"; then
@@ -106,7 +111,7 @@ fi
 
 # Tidy up so a sourced run leaves the caller's namespace clean.
 unset -f _helpme_dev_install 2>/dev/null
-unset _helpme_self _helpme_hookfile _helpme_bindir repo_dir hook_dir rc hookfile line shell_name 2>/dev/null
+unset _helpme_self _helpme_hookfile _helpme_bindir repo_dir hook_dir rc hookfile line shell_name bin bin_ext 2>/dev/null
 
 if [ "$_helpme_sourced" = 1 ]; then
   _helpme_sourced=0
