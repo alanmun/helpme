@@ -75,6 +75,38 @@ $ helpme "search this folder for 'help' by file and line"
 $ grep -rn 'help' .                ← prefilled, edit or press Enter
 ```
 
+### 3. Continue a help session — use `-c`
+
+If the quick first answer leaves you curious, continue it with `-c` (short for
+`--continue`). Everything after the flag is treated as follow-up text, so quotes
+are optional unless the text contains shell-sensitive characters such as `*`,
+`$`, or `|`:
+
+```sh
+helpme -c why does the filename pattern need quotes?
+helpme -c "what if the name contains one or more 'narc' strings?"
+```
+
+Follow-up answers deliberately explain more than the first zippy response. If
+the follow-up changes the requirements, helpme can also return a complete
+revised command and prefill it onto the next prompt just like the initial
+answer.
+
+A bare `helpme -c` means “please elaborate”: helpme expands on its previous
+answer with more reasoning, syntax detail, and useful caveats.
+
+The conversation belongs to the current terminal only and stays in shell
+memory—nothing is written to disk. Any ordinary new help request replaces it:
+
+```sh
+helpme "how do I inspect a tar file?"  # starts a new session
+helpme -c what does -t stand for?      # continues that session
+helpme "how do I find large files?"    # replaces the tar session
+```
+
+If there is no active session, `helpme -c` tells you to start one first.
+Setup, update, and version commands do not reset the active session.
+
 ## BYOAI (Bring your own AI)
 
 helpme talks to any OpenAI-style `/chat/completions` endpoint, so you choose the
@@ -194,22 +226,25 @@ binaries are never committed (see `.gitignore`).
 
 - **`helpme-bin`** (Go, no third-party dependencies) does the LLM round-trips and
   `helpme --setup`. In fix mode it reads the failed command + error; in ask mode
-  (`--ask "<question>"`) it reads a plain-language request. Both print two parts —
-  a suggested command on line 1 (empty when there isn't one), then the
-  explanation — so the wrapper parses them the same way.
+  (`--ask "<question>"`) it reads a plain-language request; in continuation mode
+  it receives the current shell-local transcript and follow-up. All three print
+  two parts—a suggested command on line 1 (empty when there isn't one), then the
+  explanation—so the wrapper parses them the same way.
 - **The shell wrapper** (`hooks/helpme.zsh` / `hooks/helpme.bash`) decides which
   mode to use (a single quoted argument → ask), owns running the command, the
-  success path, and prefilling the suggestion onto your prompt — the part a
-  separate binary can't do, since only the shell can touch its own input line.
-  It also sets `HELPME_SHELL` before calling `helpme-bin`, so the model is told
-  which shell and platform it's fixing commands for (e.g. bash under MSYS2 on
-  Windows) instead of guessing from surface cues and reaching for the wrong
-  tool family (like `findstr` for a Windows path when the shell is really bash).
+  success path, retaining the in-memory conversation for `-c`, and prefilling
+  suggestions onto your prompt—the parts a separate binary can't do, since only
+  the shell can retain per-terminal state and touch its own input line. It also
+  sets `HELPME_SHELL` before calling `helpme-bin`, so the model is told which
+  shell and platform it's fixing commands for (e.g. bash under MSYS2 on Windows)
+  instead of guessing from surface cues and reaching for the wrong tool family
+  (like `findstr` for a Windows path when the shell is really bash).
 
 ## Troubleshooting
 
-helpme keeps **no logs by default** — your commands and prompts never touch
-disk. When something misbehaves, turn logging on for a run:
+helpme keeps **no logs by default**—your commands, prompts, and active
+continuation session never touch disk. When something misbehaves, turn logging
+on for a run:
 
 ```sh
 HELPME_DEBUG=1 helpme <command>            # full request/response to stderr

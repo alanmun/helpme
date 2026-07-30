@@ -7,11 +7,11 @@
 //	line 1: the corrected command, ready to run
 //	line 2: a short, plain-language explanation of the fix
 //
-// It also has an "ask" mode (--ask "<question>"): given a natural-language
-// request, it prints the optional suggested command on line 1 (empty if none)
-// and a formatted explanation on the lines after — a » prefix for a one-liner,
-// or a box when it's multi-line. The shell wrapper routes a single quoted
-// argument here instead of running it.
+// It also has an "ask" mode (--ask "<question>") and an internal continuation
+// mode (--continue "<follow-up>"). Both print the optional suggested command on
+// line 1 (empty if none) and a formatted explanation on the lines after — a »
+// prefix for a one-liner, or a box when it's multi-line. The shell wrapper owns
+// the per-terminal conversation context and passes it back for continuations.
 //
 // The shell wrapper (hooks/helpme.{zsh,bash}) owns running the command and
 // prefilling the corrected one onto the next prompt. This binary only performs
@@ -53,6 +53,9 @@ func main() {
 				os.Exit(2)
 			}
 			runAsk(strings.Join(args[1:], " "))
+			return
+		case "--continue":
+			runContinue(strings.Join(args[1:], " "))
 			return
 		case "--print-hook":
 			if len(args) < 2 {
@@ -108,6 +111,26 @@ func runAsk(query string) {
 
 	fmt.Println(a.Command)                        // line 1: suggested command, or empty
 	fmt.Println(renderExplanation(a.Explanation)) // line 2+: formatted explanation
+}
+
+// runContinue answers a follow-up using the shell-local transcript supplied by
+// the wrapper. query may be empty: that is the shorthand for "elaborate".
+func runContinue(query string) {
+	context := strings.TrimSpace(os.Getenv("HELPME_SESSION_CONTEXT"))
+	if context == "" {
+		fmt.Fprintln(os.Stderr, `helpme: nothing to continue; start with helpme "your question"`)
+		os.Exit(2)
+	}
+
+	p := loadProviderOrExit()
+	a, err := continueQuestion(p, context, query)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "helpme:", err)
+		os.Exit(1)
+	}
+
+	fmt.Println(a.Command)
+	fmt.Println(renderExplanation(a.Explanation))
 }
 
 // loadProviderOrExit resolves the provider or exits with an actionable message.

@@ -42,6 +42,33 @@ func TestBuildAskRequest(t *testing.T) {
 	}
 }
 
+func TestBuildContinueRequest(t *testing.T) {
+	p := provider{model: "gpt-5.4-mini", reasoning: "low", maxCompletionTokens: true}
+
+	req := buildContinueRequest(p,
+		"User request:\nfind Xle mp3 files\n\nAssistant answer:\nuse find",
+		"what if the name contains one or more narc strings?")
+	raw := string(mustJSON(req))
+	if !strings.Contains(raw, `"max_completion_tokens":4096`) {
+		t.Fatalf("continue should have room for a more detailed answer: %s", raw)
+	}
+	if !strings.Contains(raw, "meaningfully more detailed") {
+		t.Fatalf("continue request should use the verbose follow-up prompt: %s", raw)
+	}
+	if !strings.Contains(raw, "find Xle mp3 files") ||
+		!strings.Contains(raw, "one or more narc strings") {
+		t.Fatalf("continue request should include the session and follow-up: %s", raw)
+	}
+	if !strings.Contains(raw, "complete revised command") {
+		t.Fatalf("continue prompt should request a revised command for refinements: %s", raw)
+	}
+
+	blank := string(mustJSON(buildContinueRequest(p, "previous answer", "")))
+	if !strings.Contains(blank, "Please elaborate on your previous answer") {
+		t.Fatalf("blank continuation should ask the model to elaborate: %s", blank)
+	}
+}
+
 func mustJSON(v any) []byte {
 	b, err := json.Marshal(v)
 	if err != nil {
@@ -66,6 +93,10 @@ func TestParseFix(t *testing.T) {
 		{"trailing prose with brace", `{"cmd":"tar -xf a.tar","why":"plain tar, drop -z"} note: zellij is {neat}`, "tar -xf a.tar", false},
 		{"brace inside string value", `{"cmd":"echo {x}","why":"braces ok"}`, "echo {x}", false},
 		{"newline in cmd collapses", "{\"cmd\":\"echo \\na\",\"why\":\"x\"}", "echo  a", false},
+		// Regression: the model labelled the command "run> ...". Prefilled as-is,
+		// bash parses that as "run . -name … > find" — a command-not-found and a
+		// stray file, never the fix the user asked for.
+		{"run> label stripped", `{"cmd":"run> find . -name 'json_valdator.py'","why":"use -name"}`, "find . -name 'json_valdator.py'", false},
 		{"no json", `I cannot help with that`, "", true},
 		{"empty cmd", `{"cmd":"","why":"nothing"}`, "", true},
 	}
@@ -88,6 +119,18 @@ func TestParseFix(t *testing.T) {
 	}
 }
 
+// The wrapper prints why as one "» ..." line, so a model that tacks a second
+// line on (often a repeat of the command) must not reach the terminal raw.
+func TestParseFixWhyIsOneLine(t *testing.T) {
+	got, err := parseFix(`{"cmd":"find . -name x","why":"use -name to match by filename\nrun> find . -name x"}`)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got.Why != "use -name to match by filename" {
+		t.Fatalf("why = %q, want the first line only", got.Why)
+	}
+}
+
 func TestParseAnswer(t *testing.T) {
 	cases := []struct {
 		name     string
@@ -101,6 +144,7 @@ func TestParseAnswer(t *testing.T) {
 		{"empty command", `{"explanation":"just an answer","command":""}`, "", "just an answer", false},
 		{"code fence", "```json\n{\"explanation\":\"x\",\"command\":\"ls\"}\n```", "ls", "x", false},
 		{"command newlines collapse", "{\"explanation\":\"x\",\"command\":\"echo \\na\"}", "echo  a", "x", false},
+		{"prompt marker stripped", `{"explanation":"x","command":"$ ls -la"}`, "ls -la", "x", false},
 		{"no json", `I cannot help`, "", "", true},
 		{"empty explanation", `{"explanation":"","command":"ls"}`, "", "", true},
 	}
@@ -121,6 +165,65 @@ func TestParseAnswer(t *testing.T) {
 			}
 			if got.Explanation != c.wantExpl {
 				t.Fatalf("explanation = %q, want %q", got.Explanation, c.wantExpl)
+			}
+		})
+	}
+}
+
+func TestParseContinuationAnswerKeepsMoreDetail(t *testing.T) {
+	var lines []string
+	for i := 1; i <= maxContinuationLines+2; i++ {
+		lines = append(lines, "detail")
+	}
+	raw, err := json.Marshal(answer{
+		Explanation: strings.Join(lines, "\n"),
+		Command:     "run> find . -name '*narc*.mp3'",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := parseContinuationAnswer(string(raw))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got.Command != "find . -name '*narc*.mp3'" {
+		t.Fatalf("revised command = %q", got.Command)
+	}
+	if n := len(strings.Split(got.Explanation, "\n")); n != maxContinuationLines {
+		t.Fatalf("continuation kept %d lines, want %d", n, maxContinuationLines)
+	}
+}
+
+func TestSanitizeCommand(t *testing.T) {
+	cases := []struct{ name, in, want string }{
+		{"bare command untouched", "find . -name x", "find . -name x"},
+		{"run label", "run> find . -name 'x.py'", "find . -name 'x.py'"},
+		{"run label no space", "run>find . -name x", "find . -name x"},
+		{"run label uppercase", "RUN> ls", "ls"},
+		{"run colon", "run: ls -la", "ls -la"},
+		{"dollar prompt", "$ ls -la", "ls -la"},
+		{"root prompt", "# apt update", "apt update"},
+		{"zsh prompt", "% ls", "ls"},
+		{"teaching marker", "» grep -r foo .", "grep -r foo ."},
+		{"stacked markers", "run> $ ls", "ls"},
+		{"wrapping backticks", "`ls -la`", "ls -la"},
+		{"code fence with lang", "```bash\nfind . -name x\n```", "find . -name x"},
+		{"code fence bare", "```\nls\n```", "ls"},
+		{"newlines collapse", "echo \na", "echo  a"},
+		// Real syntax that only looks like a marker must survive intact.
+		{"command substitution keeps dollar", "$(date) && ls", "$(date) && ls"},
+		{"variable keeps dollar", "$EDITOR file.txt", "$EDITOR file.txt"},
+		{"shebang keeps hash", "#!/bin/sh", "#!/bin/sh"},
+		{"printf keeps percent", "%s is not a prompt", "%s is not a prompt"},
+		// A leading ">" is left alone: "> file" truncates, and stripping it would
+		// leave the filename to be executed.
+		{"bare redirect preserved", "> app.log", "> app.log"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := sanitizeCommand(c.in); got != c.want {
+				t.Fatalf("sanitizeCommand(%q) = %q, want %q", c.in, got, c.want)
 			}
 		})
 	}
