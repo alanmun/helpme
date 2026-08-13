@@ -22,7 +22,6 @@ import (
 	"net/http"
 	"strings"
 	"time"
-	"unicode/utf8"
 )
 
 const systemPrompt = `You fix broken shell commands. You are given the command the user ran and the error it produced. Respond with ONLY compact JSON, no markdown, no preamble:
@@ -398,34 +397,6 @@ func parseAnswerLines(s string, maxLines int) (answer, error) {
 		return answer{}, fmt.Errorf("model returned an empty explanation")
 	}
 	return a, nil
-}
-
-// renderExplanation formats the model's plain-text explanation for the terminal:
-// a single line gets a » teaching prefix; a multi-line explanation is wrapped in
-// a box so the per-argument breakdown reads as one tidy block. The model never
-// draws this itself — it just returns the lines — so the look is consistent.
-func renderExplanation(s string) string {
-	lines := strings.Split(s, "\n")
-	if len(lines) <= 1 {
-		return "» " + s
-	}
-
-	width := 0
-	for _, ln := range lines {
-		if w := utf8.RuneCountInString(ln); w > width {
-			width = w
-		}
-	}
-
-	rule := strings.Repeat("─", width+2)
-	var b strings.Builder
-	b.WriteString("┌" + rule + "┐\n")
-	for _, ln := range lines {
-		pad := strings.Repeat(" ", width-utf8.RuneCountInString(ln))
-		b.WriteString("│ " + ln + pad + " │\n")
-	}
-	b.WriteString("└" + rule + "┘")
-	return b.String()
 }
 
 // clampLines keeps at most the first n non-empty lines, guarding against a model

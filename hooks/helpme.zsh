@@ -78,7 +78,7 @@ helpme() {
       shift
       local query="$*"
       local out
-      out=$(HELPME_SHELL=zsh HELPME_SESSION_CONTEXT="$__helpme_session_context" command helpme-bin --continue "$query")
+      out=$(HELPME_SHELL=zsh HELPME_COLUMNS="${COLUMNS:-}" HELPME_SESSION_CONTEXT="$__helpme_session_context" command helpme-bin --continue "$query")
       local rc=$?
       if (( rc != 0 )); then
         # Keep the prior context unchanged so a transient failure can be retried.
@@ -112,7 +112,7 @@ helpme() {
   # it maps to one) suggest a command to prefill.
   if (( $# == 1 )) && [[ "$1" == *[[:space:]]* ]]; then
     local out
-    out=$(HELPME_SHELL=zsh command helpme-bin --ask "$1")
+    out=$(HELPME_SHELL=zsh HELPME_COLUMNS="${COLUMNS:-}" command helpme-bin --ask "$1")
     local rc=$?
     if (( rc != 0 )); then
       # rc==3 means "no API key yet": the binary already printed the setup hint.

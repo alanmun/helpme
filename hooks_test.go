@@ -31,10 +31,12 @@ func TestBashContinuationSession(t *testing.T) {
 	stub := `#!/usr/bin/env bash
 case "$1" in
   --ask)
+	printf 'width|ask|%s\n' "$HELPME_COLUMNS" >> "$HELPME_TEST_LOG"
     printf "find . -name 'Xle*.mp3'\n"
     printf '» initial answer for %s\n' "$2"
     ;;
   --continue)
+	printf 'width|continue|%s\n' "$HELPME_COLUMNS" >> "$HELPME_TEST_LOG"
     saw_first=no
     saw_new=no
     case "$HELPME_SESSION_CONTEXT" in *"first session"*) saw_first=yes ;; esac
@@ -56,6 +58,7 @@ esac
 	script := `
 set -e
 source "$1"
+COLUMNS=47
 __helpme_prefill() {
   printf 'prefill|%s\n' "$1" >> "$HELPME_TEST_LOG"
 }
@@ -86,6 +89,12 @@ helpme -c >/dev/null
 	}
 	if n := strings.Count(got, "prefill|find . -name 'Xle*narc*.mp3'\n"); n != 2 {
 		t.Fatalf("revised continuation command was prefilled %d times, want 2:\n%s", n, got)
+	}
+	if n := strings.Count(got, "width|ask|47\n"); n != 2 {
+		t.Fatalf("ask mode received terminal width %d times, want 2:\n%s", n, got)
+	}
+	if n := strings.Count(got, "width|continue|47\n"); n != 2 {
+		t.Fatalf("continuation mode received terminal width %d times, want 2:\n%s", n, got)
 	}
 }
 

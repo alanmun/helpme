@@ -62,7 +62,8 @@ single argument that contains spaces as a question; an unquoted command like
 
 The explanation is deliberately short — a `»` one-liner for a simple answer, or a
 tidy box that breaks down each flag/argument (with a mnemonic when one exists).
-A fast nudge, not an essay:
+The box follows the current terminal pane width and wraps long lines inside its
+borders. A fast nudge, not an essay:
 
 ```
 $ helpme "search this folder for 'help' by file and line"

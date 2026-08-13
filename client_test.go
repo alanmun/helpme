@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
-	"unicode/utf8"
 )
 
 func TestBuildRequest(t *testing.T) {
@@ -252,15 +251,58 @@ func TestRenderExplanation(t *testing.T) {
 		t.Fatalf("box dropped content:\n%s", got)
 	}
 	// Every row is the same display width — the right border lines up.
-	w := utf8.RuneCountInString(lines[0])
+	w := displayWidth(lines[0])
 	for i, ln := range lines {
-		if rw := utf8.RuneCountInString(ln); rw != w {
+		if rw := displayWidth(ln); rw != w {
 			t.Fatalf("row %d width %d != %d: %q", i, rw, w, ln)
 		}
 	}
 	// Widest content is "-n line numbers" (15 runes); box = 15 + "│ "/" │" + borders = 19.
 	if w != 19 {
 		t.Fatalf("box width = %d, want 19", w)
+	}
+}
+
+func TestRenderExplanationWrapsToTerminalWidth(t *testing.T) {
+	got := renderExplanationAtWidth("-r recurse into subdirectories\n-n show line numbers", 20)
+	lines := strings.Split(got, "\n")
+	if len(lines) != 6 {
+		t.Fatalf("want wrapped box with 6 rows, got %d:\n%s", len(lines), got)
+	}
+	for i, line := range lines {
+		if width := displayWidth(line); width > 20 {
+			t.Fatalf("row %d is %d cells wide, want at most 20: %q", i, width, line)
+		}
+	}
+	if !strings.Contains(got, "│ -r recurse into │") || !strings.Contains(got, "│ subdirectories  │") {
+		t.Fatalf("line was not wrapped at a word boundary:\n%s", got)
+	}
+}
+
+func TestRenderExplanationUsesDisplayCells(t *testing.T) {
+	got := renderExplanationAtWidth("界 wide\ne\u0301 combining\n👩🏽‍💻 emoji", 40)
+	lines := strings.Split(got, "\n")
+	wantWidth := displayWidth(lines[0])
+	for i, line := range lines {
+		if width := displayWidth(line); width != wantWidth {
+			t.Fatalf("row %d is %d cells wide, want %d: %q", i, width, wantWidth, line)
+		}
+	}
+	if displayWidth("界") != 2 || displayWidth("e\u0301") != 1 || displayWidth("👩🏽‍💻") != 2 {
+		t.Fatal("display-width handling regressed for wide, combining, or joined characters")
+	}
+}
+
+func TestExplanationColumns(t *testing.T) {
+	t.Setenv("HELPME_COLUMNS", "37")
+	t.Setenv("COLUMNS", "99")
+	if got := explanationColumns(); got != 37 {
+		t.Fatalf("explanationColumns = %d, want HELPME_COLUMNS value 37", got)
+	}
+
+	t.Setenv("HELPME_COLUMNS", "not-a-number")
+	if got := explanationColumns(); got != 99 {
+		t.Fatalf("explanationColumns fallback = %d, want COLUMNS value 99", got)
 	}
 }
 
