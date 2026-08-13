@@ -16,7 +16,11 @@ M       products/investments.py
 
 ```
 
-### 1. Fix a command — prefix it with `helpme`
+`helpme` is a CLI tool focused on keeping you in the driver's seat. It's a great way to learn quickly by only using AI to teach you enough to unblock yourself.
+
+You can use `helpme` in two main ways:
+
+### helpme with a command
 
 ```
 helpme find -f Volumes.lua
@@ -35,7 +39,7 @@ find: unknown predicate `-f'
 $ find . -name Volumes.lua        ← prefilled, edit or press Enter
 ```
 
-### 2. Ask a question — put it in quotes
+### helpme with a general question
 
 Give `helpme` a single **quoted** argument and it answers in plain language
 instead of running anything. Ask it to build a command, or just ask a question:
