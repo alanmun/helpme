@@ -36,13 +36,25 @@ func configPath() string {
 // readConfig returns an empty config if the file is missing or unreadable —
 // helpme falls back to env vars and defaults in that case.
 func readConfig() config {
+	c, _ := readConfigStatus()
+	return c
+}
+
+// readConfigStatus reports file problems without exposing file contents or
+// parser errors, which can include credentials from malformed JSON.
+func readConfigStatus() (config, string) {
 	var c config
 	b, err := os.ReadFile(configPath())
 	if err != nil {
-		return c
+		if os.IsNotExist(err) {
+			return c, "not found"
+		}
+		return c, "unreadable"
 	}
-	_ = json.Unmarshal(b, &c)
-	return c
+	if err := json.Unmarshal(b, &c); err != nil {
+		return c, "invalid JSON (some settings may still be loaded)"
+	}
+	return c, "loaded"
 }
 
 func writeConfig(c config) error {

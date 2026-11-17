@@ -110,7 +110,7 @@ helpme "how do I find large files?"    # replaces the tar session
 ```
 
 If there is no active session, `helpme -c` tells you to start one first.
-Setup, update, and version commands do not reset the active session.
+Help, setup, update, and version commands do not reset the active session.
 
 ## BYOAI (Bring your own AI)
 
@@ -246,6 +246,24 @@ binaries are never committed (see `.gitignore`).
   (like `findstr` for a Windows path when the shell is really bash).
 
 ## Troubleshooting
+
+Run `helpme --help` (or `helpme -h`) for usage examples and local connection
+diagnostics. It reports the selected provider, model, endpoint origin, reasoning,
+timeout, binary location, and the exact config path checked. It honors
+`XDG_CONFIG_HOME`, otherwise checking `~/.config/helpme/config.json`, and reports
+missing, unreadable, or invalid config files.
+
+The diagnostics show which source supplies each setting and the API key:
+`HELPME_API_KEY` > saved config > the selected provider's standard key variable.
+They also show whether each supported credential environment variable is set.
+Credential values are never printed; endpoint user info, paths, query parameters,
+and fragments are hidden. Only one provider is selected at a time. “Configured
+locally” does not verify connectivity or authentication: help makes no API calls
+and works even without credentials.
+
+helpme inherits environment variables from your shell. It cannot tell which
+shell startup file set them, and it does not search `.env` files or Claude
+Code/Codex sign-in folders. Use `helpme --setup` to save or change its connection.
 
 helpme keeps **no logs by default**—your commands, prompts, and active
 continuation session never touch disk. When something misbehaves, turn logging

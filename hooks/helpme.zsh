@@ -4,6 +4,7 @@
 #   helpme <command>        run a command; fix it if it fails
 #   helpme "a question"     ask in plain language (a single quoted argument)
 #   helpme -c [follow-up]   continue the current help session (blank = elaborate)
+#   helpme --help | -h      show usage and local connection diagnostics
 #   helpme --setup | -s     run the config wizard
 #   helpme --update | -u    update to the latest release
 #   helpme --version | -v   print the version
@@ -59,13 +60,14 @@ __helpme_update() {
 helpme() {
   emulate -L zsh
   if (( $# == 0 )); then
-    print -u2 'usage: helpme <command>   (or: helpme "a question", helpme -c [follow-up], helpme --setup, helpme --update)'
+    print -u2 'usage: helpme <command>   (run helpme --help for usage and diagnostics)'
     return 1
   fi
 
   # Meta flags control helpme itself; everything else is your command or question.
   # They're --flags (not bare words) so they can't shadow a real command.
   case "$1" in
+    --help|-h)     HELPME_SHELL=zsh command helpme-bin --help; return $? ;;
     --setup|-s)    command helpme-bin --setup;   return $? ;;
     --update|-u)   __helpme_update;              return $? ;;
     --version|-v)  command helpme-bin --version; return $? ;;

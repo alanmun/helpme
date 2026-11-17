@@ -44,6 +44,9 @@ func main() {
 	// with a real command the wrapper forwards).
 	if len(args) > 0 {
 		switch args[0] {
+		case "--help", "-h":
+			printHelp(os.Stdout)
+			return
 		case "setup", "--setup", "-s":
 			runSetup()
 			return
@@ -71,7 +74,7 @@ func main() {
 	}
 
 	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "helpme: no command given")
+		fmt.Fprintln(os.Stderr, "helpme: no command given; run helpme --help for usage and diagnostics")
 		os.Exit(2)
 	}
 	command := strings.Join(args, " ")

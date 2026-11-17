@@ -77,35 +77,67 @@ var providerKeyEnv = map[string]string{
 	"openrouter": "OPENROUTER_API_KEY",
 }
 
-// pick returns the first non-empty of env var, config value, then default.
-func pick(envKey, cfgVal, def string) string {
+// setting keeps the source alongside its value so diagnostics use the exact
+// same resolution as requests. Credential values must never be printed.
+type setting struct {
+	value, source string
+}
+
+func pickSetting(envKey, cfgVal, def string) setting {
 	if v := strings.TrimSpace(os.Getenv(envKey)); v != "" {
-		return v
+		return setting{v, "environment: " + envKey}
 	}
 	if v := strings.TrimSpace(cfgVal); v != "" {
-		return v
+		return setting{v, "config file"}
 	}
-	return def
+	return setting{def, "built-in default"}
+}
+
+type providerSettings struct {
+	name, baseURL, model, reasoning, apiKey setting
+}
+
+func resolveProvider(cfg config) providerSettings {
+	name := pickSetting("HELPME_PROVIDER", cfg.Provider, "anthropic")
+	name.value = strings.ToLower(name.value)
+	d := providerDefaults[name.value]
+	s := providerSettings{
+		name:      name,
+		baseURL:   pickSetting("HELPME_BASE_URL", cfg.BaseURL, d.baseURL),
+		model:     pickSetting("HELPME_MODEL", cfg.Model, d.model),
+		reasoning: pickSetting("HELPME_REASONING", cfg.Reasoning, d.reasoning),
+		apiKey:    pickSetting("HELPME_API_KEY", cfg.APIKey, ""),
+	}
+	if s.apiKey.value == "" {
+		s.apiKey.source = "none"
+		if ev := providerKeyEnv[name.value]; ev != "" {
+			if value := strings.TrimSpace(os.Getenv(ev)); value != "" {
+				s.apiKey = setting{value, "environment: " + ev}
+			}
+		}
+	}
+	return s
 }
 
 func loadProvider() (provider, error) {
-	cfg := readConfig()
+	return providerFromSettings(resolveProvider(readConfig()))
+}
 
-	name := strings.ToLower(pick("HELPME_PROVIDER", cfg.Provider, "anthropic"))
-
+func providerFromSettings(s providerSettings) (provider, error) {
+	name := s.name.value
 	d, known := providerDefaults[name]
 	if !known && name != "custom" {
 		return provider{}, fmt.Errorf("unknown provider %q (use anthropic|openai|openrouter|custom)", name)
 	}
 
 	p := provider{
-		baseURL:             pick("HELPME_BASE_URL", cfg.BaseURL, d.baseURL),
-		model:               pick("HELPME_MODEL", cfg.Model, d.model),
+		baseURL:             s.baseURL.value,
+		model:               s.model.value,
 		maxCompletionTokens: d.maxCompletionTokens,
 	}
 
 	// Reasoning effort: HELPME_REASONING > config > provider default; off/none omit it.
-	reasoning := strings.ToLower(pick("HELPME_REASONING", cfg.Reasoning, d.reasoning))
+	reasoning := strings.ToLower(s.reasoning.value)
 	switch reasoning {
 	case "off", "none", "disabled":
 		reasoning = ""
@@ -119,12 +151,7 @@ func loadProvider() (provider, error) {
 	}
 
 	// API key: HELPME_API_KEY > config > provider-standard env var.
-	p.apiKey = pick("HELPME_API_KEY", cfg.APIKey, "")
-	if p.apiKey == "" {
-		if ev := providerKeyEnv[name]; ev != "" {
-			p.apiKey = strings.TrimSpace(os.Getenv(ev))
-		}
-	}
+	p.apiKey = s.apiKey.value
 
 	if p.baseURL == "" {
 		return p, fmt.Errorf("no base URL for provider %q; run 'helpme --setup' or set HELPME_BASE_URL", name)
