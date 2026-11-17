@@ -261,9 +261,7 @@ and fragments are hidden. Only one provider is selected at a time. “Configured
 locally” does not verify connectivity or authentication: help makes no API calls
 and works even without credentials.
 
-helpme inherits environment variables from your shell. It cannot tell which
-shell startup file set them, and it does not search `.env` files or Claude
-Code/Codex sign-in folders. Use `helpme --setup` to save or change its connection.
+Use `helpme --setup` to save or change the connection.
 
 helpme keeps **no logs by default**—your commands, prompts, and active
 continuation session never touch disk. When something misbehaves, turn logging

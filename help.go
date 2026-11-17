@@ -46,10 +46,6 @@ Configuration:
   HELPME_DEBUG=1     Log requests/responses to stderr (includes prompts)
   HELPME_LOG=<path>  Append requests/responses to a file (includes prompts)
 
-Settings: environment > config file > built-in default.
-Keys: HELPME_API_KEY > config api_key > selected provider's standard key variable.
-
-Local connection diagnostics (no API request; credentials are never printed):
 `, version)
 
 	cfg, status := readConfigStatus()
@@ -66,7 +62,7 @@ Local connection diagnostics (no API request; credentials are never printed):
 	fmt.Fprintf(w, "  Config checked: %q (%s; via %s)\n", configPath(), status, pathSource)
 	fmt.Fprintf(w, "  Selected provider: %q (%s)\n", s.name.value, s.name.source)
 	fmt.Fprintf(w, "  Model: %q (%s)\n", s.model.value, s.model.source)
-	fmt.Fprintf(w, "  Endpoint origin: %s (%s; user info, path, query, fragment omitted)\n", endpointOrigin(s.baseURL.value), s.baseURL.source)
+	fmt.Fprintf(w, "  Endpoint origin: %s (%s)\n", endpointOrigin(s.baseURL.value), s.baseURL.source)
 	fmt.Fprintf(w, "  API key: %s\n", s.apiKey.source)
 	if p.timeout > 0 {
 		fmt.Fprintf(w, "  Reasoning: %q (%s; empty means omitted)\n", p.reasoning, s.reasoning.source)
@@ -75,7 +71,7 @@ Local connection diagnostics (no API request; credentials are never printed):
 	if err != nil {
 		fmt.Fprintf(w, "  Status: needs configuration — %s\n", err)
 	} else {
-		fmt.Fprintln(w, "  Status: configured locally; connectivity and authentication have not been verified")
+		fmt.Fprintln(w, "  Status: configured locally")
 		if s.name.value == "custom" && s.apiKey.value == "" {
 			fmt.Fprintln(w, "  Custom endpoint will be called without an API key")
 		}
@@ -88,9 +84,9 @@ Local connection diagnostics (no API request; credentials are never printed):
 		}
 		fmt.Fprintf(w, "    %s: %s\n", name, state)
 	}
-	fmt.Fprintln(w, "  Environment variables are inherited; helpme cannot identify which shell file set them.")
-	fmt.Fprintln(w, "  No .env files, Claude Code credentials, or Codex sign-in folders are searched.")
 	fmt.Fprintln(w, "  Run helpme --setup to configure or change the connection.")
+	fmt.Fprintln(w, "\n  * Settings: environment > config file > built-in default.")
+	fmt.Fprintln(w, "    Keys: HELPME_API_KEY > config api_key > selected provider's standard key variable.")
 }
 
 // Show only the origin: custom endpoints may embed secrets in user info,
